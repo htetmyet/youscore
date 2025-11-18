@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProTips</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Poppins', 'sans-serif'],
+              burmese: ['Padauk', 'sans-serif'],
+            },
+            colors: {
+              primary: {
+                DEFAULT: '#10B981', // Emerald 500
+                light: '#34D399',  // Emerald 400
+                dark: '#059669',   // Emerald 600
+              },
+              secondary: {
+                DEFAULT: '#38BDF8', // Sky 400
+                dark: '#0EA5E9',   // Sky 500
+              },
+              accent: {
+                DEFAULT: '#F59E0B', // Amber 500
+                dark: '#D97706',  // Amber 600
+              },
+              background: '#F9FAFB', // Gray 50
+              surface: {
+                  DEFAULT: '#FFFFFF',   // White
+                  light: '#F3F4F6',   // Gray 100
+              },
+              text: {
+                DEFAULT: '#111827', // Gray 900
+                light: '#374151',   // Gray 700
+                dark: '#6B7280',    // Gray 500
+              },
+            },
+            animation: {
+                'glow': 'glow 2s ease-in-out infinite',
+                'marquee': 'marquee 40s linear infinite',
+            },
+            keyframes: {
+                glow: {
+                    '0%, 100%': { boxShadow: '0 0 5px #10B981, 0 0 10px #10B981, 0 0 15px #10B981' },
+                    '50%': { boxShadow: '0 0 20px #34D399, 0 0 30px #34D399, 0 0 40px #34D399' }
+                },
+                marquee: {
+                    '0%': { transform: 'translateX(0%)' },
+                    '100%': { transform: 'translateX(-50%)' },
+                }
+            }
+          }
+        }
+      }
+    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-background text-text-DEFAULT font-sans">
+<div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

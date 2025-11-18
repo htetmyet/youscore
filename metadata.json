@@ -1,0 +1,5 @@
+{
+  "name": "ProTips Football Predictor",
+  "description": "A premium football prediction platform offering expert tips for subscribers. Features include user registration, subscription management with manual payment verification, and an admin dashboard for managing users and match predictions.",
+  "requestFramePermissions": []
+}

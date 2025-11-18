@@ -1,0 +1,269 @@
+
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/mockApi';
+import { Prediction, User } from '../types';
+import { useLanguage } from '../App';
+import { useAuth } from '../hooks/useAuth';
+import { AlertTriangleIcon } from '../components/icons';
+
+interface PredictionCardProps {
+    prediction: Prediction;
+    isSelected: boolean;
+    onSelect: () => void;
+    suggestedStake: number | null;
+}
+
+const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isSelected, onSelect, suggestedStake }) => {
+    const { t } = useLanguage();
+
+    const borderClass = prediction.type === 'big' ? 'border-t-4 border-secondary' : 'border-t-4 border-primary';
+
+    return (
+        <div className={`bg-surface border rounded-lg shadow-lg overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl relative ${borderClass} ${isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'border-gray-200'}`}>
+            <div className="absolute top-3 right-3 z-10">
+                <input 
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={onSelect}
+                    className="h-5 w-5 rounded border-gray-400 text-primary focus:ring-primary cursor-pointer"
+                />
+            </div>
+            <div className="p-4">
+                <div className="mb-1 pr-8">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wide">{prediction.league}</p>
+                    <p className="text-xs text-text-dark">{prediction.date}</p>
+                </div>
+                <h3 className="text-md font-bold text-text-DEFAULT mb-3 truncate" title={prediction.match}>{prediction.match}</h3>
+                
+                <div className="bg-primary/10 p-2 rounded-md text-center mb-3">
+                    <p className="text-[10px] text-primary-dark font-semibold uppercase tracking-wider">{t('predictions_card_ourTip')}</p>
+                    <p className="text-lg font-extrabold text-primary-dark">{prediction.tip}</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center border-t border-gray-200 pt-3">
+                    <div>
+                        <p className="text-[11px] font-medium text-text-light uppercase">{t('predictions_card_odds')}</p>
+                        <p className="text-md font-bold text-accent-dark">
+                            {typeof prediction.odds === 'number' ? prediction.odds.toFixed(2) : 'N/A'}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-medium text-text-light uppercase">{t('predictions_card_suggested_stake')}</p>
+                        <p className="text-md font-bold text-secondary-dark">
+                           {suggestedStake !== null ? suggestedStake.toFixed(2) : (prediction.recommendedStake || '1')}
+                        </p>
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-medium text-text-light uppercase">{t('predictions_card_confidence')}</p>
+                         <p className={`text-md font-bold ${prediction.type === 'big' && prediction.confidence ? 'text-text-DEFAULT' : 'text-text-dark'}`}>
+                           {prediction.type === 'big' && prediction.confidence ? `${prediction.confidence}%` : '-'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const getSegmentType = (date: Date): 'mid-week' | 'weekend' => {
+    const day = date.getDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
+    if (day >= 1 && day <= 4) { // Monday to Thursday
+        return 'mid-week';
+    }
+    return 'weekend'; // Friday, Saturday, Sunday
+};
+
+const PredictionsPage: React.FC = () => {
+    const [bigLeaguePredictions, setBigLeaguePredictions] = useState<Prediction[]>([]);
+    const [smallLeaguePredictions, setSmallLeaguePredictions] = useState<Prediction[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { t } = useLanguage();
+    const { user } = useAuth();
+    
+    const [selectedPredictions, setSelectedPredictions] = useState<Set<string>>(new Set());
+    const [totalStake, setTotalStake] = useState('');
+    const [calculatedStakes, setCalculatedStakes] = useState<Record<string, number>>({});
+    const [freeAccessSegment, setFreeAccessSegment] = useState<'mid-week' | 'weekend' | null>(null);
+    
+    useEffect(() => {
+        // Check for free access
+        if (user && user.subscription.status !== 'active' && user.freeAccess) {
+            const now = new Date();
+            const todaySegment = getSegmentType(now);
+
+            if (todaySegment === 'mid-week' && user.freeAccess.midWeekExpires && new Date(user.freeAccess.midWeekExpires) > now) {
+                setFreeAccessSegment('mid-week');
+            } else if (todaySegment === 'weekend' && user.freeAccess.weekendExpires && new Date(user.freeAccess.weekendExpires) > now) {
+                setFreeAccessSegment('weekend');
+            }
+        }
+    }, [user]);
+
+    useEffect(() => {
+        const fetchPredictions = async () => {
+            setLoading(true);
+            try {
+                const data = await api.fetchPredictions('pending');
+            
+                // All pending predictions are shown, regardless of date, until their result is updated.
+                let upcomingPredictions = data;
+
+                if (freeAccessSegment) {
+                    upcomingPredictions = upcomingPredictions.filter(p => {
+                        const pDate = new Date(p.date);
+                        return getSegmentType(pDate) === freeAccessSegment;
+                    });
+                }
+
+                setBigLeaguePredictions(upcomingPredictions.filter(p => p.type === 'big'));
+                setSmallLeaguePredictions(upcomingPredictions.filter(p => p.type === 'small'));
+            } catch (error) {
+                console.error("Failed to fetch predictions:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPredictions();
+    }, [freeAccessSegment]);
+
+    const handleSelectPrediction = (predictionId: string) => {
+        setSelectedPredictions(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(predictionId)) {
+                newSet.delete(predictionId);
+            } else {
+                newSet.add(predictionId);
+            }
+            return newSet;
+        });
+
+        setCalculatedStakes(prev => {
+            const newStakes = {...prev};
+            delete newStakes[predictionId];
+            return newStakes;
+        });
+    };
+
+    const handleCalculateStakes = () => {
+        const totalStakeNum = parseFloat(totalStake);
+        if (isNaN(totalStakeNum) || totalStakeNum <= 0) return;
+
+        const allPredictions = [...bigLeaguePredictions, ...smallLeaguePredictions];
+        const selected = allPredictions.filter(p => selectedPredictions.has(p.id));
+        if (selected.length === 0) return;
+
+        const weights = selected.map(p => 1 / p.odds);
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+        const newStakes: Record<string, number> = {};
+        selected.forEach((p, index) => {
+            const stake = (weights[index] / totalWeight) * totalStakeNum;
+            newStakes[p.id] = stake;
+        });
+
+        setCalculatedStakes(newStakes);
+    };
+
+    if (loading) {
+        return <div className="text-center">{t('loading')}</div>;
+    }
+
+    return (
+        <div className="pb-24">
+            {freeAccessSegment && (
+                <div className="bg-primary/10 border-l-4 border-primary text-primary-dark p-4 mb-8 rounded-r-lg shadow" role="alert">
+                    <p className="font-bold">Free Access Granted!</p>
+                    <p className="text-sm">You have been granted free access to this week's {freeAccessSegment} predictions due to our guarantee. Enjoy!</p>
+                </div>
+            )}
+            
+             <div className="bg-accent/10 border-l-4 border-accent text-accent-dark p-4 mb-8 rounded-r-lg shadow" role="alert">
+                <div className="flex">
+                    <div className="py-1">
+                        <AlertTriangleIcon className="h-6 w-6 text-accent mr-4"/>
+                    </div>
+                    <div>
+                        <p className="font-bold">{t('disclaimer_title')}</p>
+                        <p className="text-sm">{t('predictions_disclaimer')}</p>
+                    </div>
+                </div>
+            </div>
+
+            <h1 className="text-3xl font-bold mb-8 text-center text-text-DEFAULT">{t('predictions_title')}</h1>
+            {(bigLeaguePredictions.length === 0 && smallLeaguePredictions.length === 0) ? (
+                <p className="text-center text-text-light">{t('predictions_none')}</p>
+            ) : (
+                 <div className="space-y-12">
+                    {bigLeaguePredictions.length > 0 && (
+                        <section>
+                            <h2 className="text-2xl font-bold mb-4 pb-2 border-b-2 border-secondary text-text-DEFAULT">{t('predictions_bigLeagues')}</h2>
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {bigLeaguePredictions.map(p => 
+                                    <PredictionCard 
+                                        key={p.id} 
+                                        prediction={p} 
+                                        isSelected={selectedPredictions.has(p.id)}
+                                        onSelect={() => handleSelectPrediction(p.id)}
+                                        suggestedStake={calculatedStakes[p.id] ?? null}
+                                    />
+                                )}
+                            </div>
+                        </section>
+                    )}
+                     {smallLeaguePredictions.length > 0 && (
+                        <section>
+                             <h2 className="text-2xl font-bold mb-4 pb-2 border-b-2 border-primary text-text-DEFAULT">{t('predictions_smallLeagues')}</h2>
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {smallLeaguePredictions.map(p => 
+                                    <PredictionCard 
+                                        key={p.id} 
+                                        prediction={p} 
+                                        isSelected={selectedPredictions.has(p.id)}
+                                        onSelect={() => handleSelectPrediction(p.id)}
+                                        suggestedStake={calculatedStakes[p.id] ?? null}
+                                    />
+                                )}
+                            </div>
+                        </section>
+                    )}
+                </div>
+            )}
+
+            {selectedPredictions.size > 0 && (
+                <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t border-gray-200 shadow-2xl z-40">
+                    <div className="container mx-auto p-4">
+                       <div className="max-w-3xl mx-auto bg-surface p-4 rounded-lg shadow-inner border border-gray-200">
+                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="text-center sm:text-left">
+                                    <h3 className="font-bold text-text-DEFAULT">{t('stake_calculator_title')}</h3>
+                                    <p className="text-sm text-text-light">{t('stake_calculator_selected', { count: selectedPredictions.size.toString() })}</p>
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                    <div className="flex-grow">
+                                        <label htmlFor="totalStake" className="sr-only">{t('stake_calculator_total_stake_label')}</label>
+                                        <input 
+                                            type="number"
+                                            id="totalStake"
+                                            value={totalStake}
+                                            onChange={(e) => setTotalStake(e.target.value)}
+                                            placeholder={t('stake_calculator_total_stake_placeholder')}
+                                            className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm placeholder-text-dark focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={handleCalculateStakes}
+                                        className="bg-primary text-white font-bold py-2 px-4 rounded-md shadow-md hover:bg-primary-dark transition-all disabled:bg-gray-300 flex-shrink-0"
+                                    >
+                                        {t('stake_calculator_button')}
+                                    </button>
+                                </div>
+                            </div>
+                       </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default PredictionsPage;
