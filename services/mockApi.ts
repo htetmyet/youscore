@@ -1,6 +1,13 @@
 import { AppSettings, Notification, Prediction, PredictionResult, SubscriptionPlan, User, WeeklyStat } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090/api';
+const getDefaultApiBaseUrl = () => {
+    if (typeof window !== 'undefined' && window.location.origin) {
+        return `${window.location.origin.replace(/\/$/, '')}/api`;
+    }
+    return 'http://192.168.1.40:8090/api';
+};
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl()).replace(/\/$/, '');
 
 class ApiError extends Error {
     status: number;

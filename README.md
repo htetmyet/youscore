@@ -47,24 +47,24 @@ The server automatically provisions an admin account using the credentials in `.
 Add the backend URL to your Vite env file so the API client knows where to send requests:
 
 ```
-VITE_API_BASE_URL=http://localhost:8090/api
+VITE_API_BASE_URL=http://192.168.1.40:8091/api
 GEMINI_API_KEY=...
 ```
 
 Be sure to start the backend before running `npm run dev` so the UI can load data from PostgreSQL.
 
-## Docker Deployment (Port 8080)
+## Docker Deployment (Ports 8090/8091)
 
-Use Docker to run PostgreSQL, the API (exposed on 8091), and the production React build (served on 8090).
+Use Docker to run PostgreSQL, the API (exposed on host port 8091), and the production React build (served on host port 8090).
 
 1. Build and start everything:
    ```bash
    docker-compose up --build
    ```
-2. The API is now reachable at http://localhost:8091/api and auto-runs database migrations plus the default admin account.
-3. The compiled frontend is served from http://localhost:8090 and talks to the API via the host port 8091. For local dev via Vite, you can still run `npm run dev` with `VITE_API_BASE_URL=http://localhost:8091/api` (or `http://localhost:8090/api` if you run the backend directly on your machine).
+2. The API is now reachable at http://192.168.1.40:8091/api and auto-runs database migrations plus the default admin account.
+3. The compiled frontend is served from http://192.168.1.40:8090 and talks to the API via the host port 8091. For local dev via Vite (which runs on port 5173), you can still run `npm run dev` with `VITE_API_BASE_URL=http://192.168.1.40:8091/api` (or point it to another backend if you're running it elsewhere).
 
-The compose file exposes Postgres on 5432 (for inspection) and persists data in the `db_data` volume.
+The compose file exposes Postgres on host port 5433 (mapped to the container's 5432) and persists data in the `db_data` volume.
 
 ### Remote databases
 
