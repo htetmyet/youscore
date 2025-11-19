@@ -33,4 +33,5 @@ export const config = {
   deviceLimit: num(process.env.DEVICE_LIMIT, 2),
   adminEmail: process.env.ADMIN_EMAIL ?? 'admin@protips.com',
   adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
+  forceAdminSync: bool(process.env.FORCE_ADMIN_SYNC, false),
 };

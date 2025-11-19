@@ -43,8 +43,12 @@ CREATE TABLE IF NOT EXISTS predictions (
 CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY,
     page_title TEXT NOT NULL,
-    logo_url TEXT
+    logo_url TEXT,
+    landing_sections JSONB
 );
+
+ALTER TABLE app_settings
+    ADD COLUMN IF NOT EXISTS landing_sections JSONB;
 
 CREATE TABLE IF NOT EXISTS supported_leagues (
     id SERIAL PRIMARY KEY,
@@ -68,3 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 INSERT INTO app_settings (id, page_title, logo_url)
 VALUES (1, 'ProTips Football Predictor', NULL)
 ON CONFLICT (id) DO NOTHING;
+
+UPDATE app_settings
+SET landing_sections = COALESCE(landing_sections, '{}'::jsonb)
+WHERE id = 1;

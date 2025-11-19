@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { usePage, useLanguage } from '../App';
+import { usePage, useLanguage, useSettings } from '../App';
 import { FootballIcon } from '../components/icons';
 
 const RegisterPage: React.FC = () => {
@@ -12,6 +12,7 @@ const RegisterPage: React.FC = () => {
     const { register } = useAuth();
     const { setCurrentPage } = usePage();
     const { t } = useLanguage();
+    const { settings } = useSettings();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -44,7 +45,13 @@ const RegisterPage: React.FC = () => {
         <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-md w-full space-y-8 bg-surface border border-gray-200 p-10 rounded-xl shadow-xl">
                 <div>
-                    <FootballIcon className="mx-auto h-12 w-auto text-primary"/>
+                    <div className="mx-auto h-12 w-auto flex items-center justify-center">
+                        {settings.logoUrl ? (
+                            <img src={settings.logoUrl} alt={`${settings.pageTitle} logo`} className="h-12 w-auto object-contain" />
+                        ) : (
+                            <FootballIcon className="h-12 w-12 text-primary" />
+                        )}
+                    </div>
                     <h2 className="mt-6 text-center text-3xl font-extrabold text-text-DEFAULT">
                         {t('register_title')}
                     </h2>

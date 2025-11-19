@@ -111,9 +111,22 @@ export const getUserCredentialsByEmail = async (email: string) => getUserRowByEm
 
 export const ensureAdminUser = async () => {
   const normalizedEmail = config.adminEmail.toLowerCase();
+  const hash = await bcrypt.hash(config.adminPassword, 10);
   const existingByEmail = await getUserRowByEmail(normalizedEmail);
+
   if (existingByEmail) {
-    if (existingByEmail.role !== 'admin') {
+    if (config.forceAdminSync) {
+      await pool.query(
+        `UPDATE users
+         SET password_hash = $2,
+             role = 'admin',
+             subscription_plan = 'none',
+             subscription_status = 'inactive',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [existingByEmail.id, hash]
+      );
+    } else if (existingByEmail.role !== 'admin') {
       await pool.query(
         `UPDATE users
          SET role = 'admin',
@@ -127,21 +140,23 @@ export const ensureAdminUser = async () => {
     return;
   }
 
-  const { rows } = await pool.query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
+  const { rows } = await pool.query(`SELECT id, email FROM users WHERE role = 'admin' LIMIT 1`);
   if (rows[0]) {
-    await pool.query(
-      `UPDATE users
-       SET email = $2,
-           subscription_plan = 'none',
-           subscription_status = 'inactive',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [rows[0].id, normalizedEmail]
-    );
+    if (config.forceAdminSync) {
+      await pool.query(
+        `UPDATE users
+         SET email = $2,
+             password_hash = $3,
+             subscription_plan = 'none',
+             subscription_status = 'inactive',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [rows[0].id, normalizedEmail, hash]
+      );
+    }
     return;
   }
 
-  const hash = await bcrypt.hash(config.adminPassword, 10);
   const id = randomUUID();
   await pool.query(
     `INSERT INTO users (id, email, password_hash, role, subscription_plan, subscription_status)

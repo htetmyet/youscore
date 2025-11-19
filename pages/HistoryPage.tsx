@@ -1,9 +1,52 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/mockApi';
 import { Prediction, PredictionResult } from '../types';
 import { useLanguage } from '../App';
+
+const ITEMS_PER_PAGE = 20;
+
+const PaginationControls: React.FC<{
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+}> = ({ currentPage, totalPages, onPageChange }) => {
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+    }
+
+    return (
+        <div className="flex flex-wrap justify-center items-center gap-2 mt-6">
+            <button
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-surface-light hover:bg-surface disabled:opacity-50"
+            >
+                Prev
+            </button>
+            {pages.map(page => (
+                <button
+                    key={page}
+                    onClick={() => onPageChange(page)}
+                    className={`px-3 py-1.5 text-sm border rounded-md ${page === currentPage ? 'bg-primary text-white border-primary shadow' : 'border-gray-300 bg-surface-light hover:bg-surface'}`}
+                >
+                    {page}
+                </button>
+            ))}
+            <button
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-surface-light hover:bg-surface disabled:opacity-50"
+            >
+                Next
+            </button>
+        </div>
+    );
+};
 
 const getResultColor = (result: PredictionResult) => {
     switch (result) {
@@ -21,6 +64,7 @@ const getResultColor = (result: PredictionResult) => {
 const HistoryPage: React.FC = () => {
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
     const { t } = useLanguage();
 
     useEffect(() => {
@@ -31,6 +75,7 @@ const HistoryPage: React.FC = () => {
                 // Sort by date, most recent first
                 data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setPredictions(data);
+                setCurrentPage(1);
             } catch (error) {
                 console.error("Failed to fetch prediction history:", error);
             } finally {
@@ -39,6 +84,18 @@ const HistoryPage: React.FC = () => {
         };
         fetchHistory();
     }, []);
+
+    const totalPages = Math.ceil(predictions.length / ITEMS_PER_PAGE);
+    const paginatedPredictions = useMemo(
+        () => predictions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+        [predictions, currentPage]
+    );
+
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, totalPages]);
 
     const translateResult = (result: PredictionResult) => {
         const key = `result_${result.toLowerCase()}` as any;
@@ -72,9 +129,11 @@ const HistoryPage: React.FC = () => {
                                     <td colSpan={7} className="px-6 py-4 text-center text-text-light">{t('history_table_none')}</td>
                                 </tr>
                             ) : (
-                                predictions.map((p) => (
+                                paginatedPredictions.map((p) => (
                                     <tr key={p.id} className="hover:bg-surface-light transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light">{p.date}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light">
+                                            {new Date(p.date).toLocaleDateString()}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-DEFAULT">{p.match}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-text-light">{p.tip}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-accent-dark font-semibold">
@@ -95,6 +154,7 @@ const HistoryPage: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+                <PaginationControls currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
         </div>
     );

@@ -143,6 +143,21 @@ class ApiClient {
         });
     }
 
+    async changeEmail(userId: string, newEmail: string, currentPassword?: string): Promise<{ success: boolean; code?: string; user?: User }> {
+        try {
+            const data = await this.request<{ user: User }>(`/users/${userId}/email`, {
+                method: 'POST',
+                body: JSON.stringify({ newEmail, currentPassword }),
+            });
+            return { success: true, user: data.user };
+        } catch (error) {
+            if (error instanceof ApiError && error.code) {
+                return { success: false, code: error.code };
+            }
+            throw error;
+        }
+    }
+
     async fetchSettings(): Promise<AppSettings> {
         const data = await this.request<{ settings: AppSettings }>(`/settings`, { method: 'GET' });
         return data.settings;
@@ -163,8 +178,12 @@ class ApiClient {
         });
     }
 
-    async fetchPredictions(status: 'pending' | 'history'): Promise<Prediction[]> {
-        const data = await this.request<{ predictions: Prediction[] }>(`/predictions?status=${status}`, { method: 'GET' });
+    async fetchPredictions(status: 'pending' | 'history', options: RequestInit = {}): Promise<Prediction[]> {
+        const requestOptions: RequestInit = {
+            method: 'GET',
+            ...options,
+        };
+        const data = await this.request<{ predictions: Prediction[] }>(`/predictions?status=${status}`, requestOptions);
         return data.predictions;
     }
 

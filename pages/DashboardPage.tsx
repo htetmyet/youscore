@@ -53,6 +53,23 @@ const DashboardPage: React.FC = () => {
     const winRate = totalBets > 0 ? (allTimeStats.winCount / totalBets) * 100 : 0;
 
     const maxAbsPL = Math.max(...stats.map(s => Math.abs(s.profitOrLoss)), 1);
+    const chartWeeks = stats.slice().reverse();
+    const getBarSections = (value: number) => ({
+        positive: value > 0 ? (value / maxAbsPL) * 50 : 0,
+        negative: value < 0 ? (Math.abs(value) / maxAbsPL) * 50 : 0,
+    });
+    const aggregatePL = stats.reduce(
+        (acc, week) => {
+            if (week.profitOrLoss >= 0) {
+                acc.totalProfit += week.profitOrLoss;
+            } else {
+                acc.totalLoss += Math.abs(week.profitOrLoss);
+            }
+            return acc;
+        },
+        { totalProfit: 0, totalLoss: 0 }
+    );
+    const maxAggregate = Math.max(aggregatePL.totalProfit, aggregatePL.totalLoss, 1);
 
 
     if (loading) {
@@ -99,18 +116,79 @@ const DashboardPage: React.FC = () => {
             {/* Weekly P/L Chart */}
             <div className="bg-surface border border-gray-200 p-6 rounded-lg shadow-lg">
                 <h2 className="text-xl font-semibold mb-4 text-text-DEFAULT">{t('dashboard_weeklyPLChart')}</h2>
-                <div className="flex items-end space-x-2 h-64 border-l border-b border-gray-200 p-2 overflow-x-auto">
-                    {stats.slice().reverse().map(week => (
-                        <div key={week.weekIdentifier} className="flex-shrink-0 w-12 text-center group relative">
-                            <div 
-                                className={`w-full rounded-t-md transition-all duration-300 ${week.profitOrLoss >= 0 ? 'bg-primary hover:bg-primary-dark' : 'bg-red-500 hover:bg-red-600'}`}
-                                style={{ height: `${(Math.abs(week.profitOrLoss) / maxAbsPL) * 100}%` }}
-                            >
-                                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-text-DEFAULT opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {week.profitOrLoss.toFixed(2)}
-                                </span>
+                <div className="relative h-64">
+                    <div className="absolute left-4 top-6 text-xs font-semibold text-primary">{t('dashboard_profit')}</div>
+                    <div className="absolute left-4 bottom-6 text-xs font-semibold text-red-500">{t('dashboard_loss')}</div>
+                    <div className="absolute left-2 right-2 top-1/2 border-t border-gray-200" aria-hidden="true" />
+                    <div className="flex items-stretch space-x-3 h-full overflow-x-auto pl-16 pr-4">
+                        {chartWeeks.map(week => {
+                            const { positive, negative } = getBarSections(week.profitOrLoss);
+                            return (
+                                <div key={week.weekIdentifier} className="flex-shrink-0 w-16 text-center group">
+                                    <div className="relative h-full">
+                                        {positive > 0 && (
+                                            <div className="absolute left-1/2 bottom-1/2 -translate-x-1/2 flex flex-col items-center">
+                                                <span className="mb-1 text-xs font-semibold text-text-DEFAULT opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {week.profitOrLoss.toFixed(2)}
+                                                </span>
+                                                <div
+                                                    className="w-3/4 rounded-t-md bg-primary transition-colors duration-300 group-hover:bg-primary-dark"
+                                                    style={{ height: `${positive}%` }}
+                                                />
+                                            </div>
+                                        )}
+                                        {negative > 0 && (
+                                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 flex flex-col items-center">
+                                                <div
+                                                    className="w-3/4 rounded-b-md bg-red-500 transition-colors duration-300 group-hover:bg-red-600"
+                                                    style={{ height: `${negative}%` }}
+                                                />
+                                                <span className="mt-1 text-xs font-semibold text-text-DEFAULT opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {week.profitOrLoss.toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {week.profitOrLoss === 0 && (
+                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-secondary-dark" />
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-text-dark mt-2 whitespace-nowrap">{week.weekIdentifier.replace('-W', ' W')}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                <div className="flex items-center justify-end gap-4 mt-4 text-xs text-text-light">
+                    <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-primary" />
+                        <span className="font-medium text-text-DEFAULT">{t('dashboard_profit')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-red-500" />
+                        <span className="font-medium text-text-DEFAULT">{t('dashboard_loss')}</span>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Profit vs Loss Overview */}
+            <div className="bg-surface border border-gray-200 p-6 rounded-lg shadow-lg">
+                <h2 className="text-xl font-semibold mb-4 text-text-DEFAULT">{t('dashboard_profitLossOverview')}</h2>
+                <div className="space-y-4">
+                    {[
+                        { label: t('dashboard_profit'), value: aggregatePL.totalProfit, color: 'bg-primary' },
+                        { label: t('dashboard_loss'), value: aggregatePL.totalLoss, color: 'bg-red-500' },
+                    ].map(item => (
+                        <div key={item.label}>
+                            <div className="flex justify-between mb-2 text-sm text-text-light">
+                                <span className="font-medium text-text-DEFAULT">{item.label}</span>
+                                <span className="font-semibold text-text-DEFAULT">{item.value.toFixed(2)}</span>
                             </div>
-                            <p className="text-xs text-text-dark mt-1 whitespace-nowrap">{week.weekIdentifier.replace('-W', ' W')}</p>
+                            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-3 ${item.color}`}
+                                    style={{ width: `${(item.value / maxAggregate) * 100}%` }}
+                                />
+                            </div>
                         </div>
                     ))}
                 </div>

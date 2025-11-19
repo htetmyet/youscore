@@ -11,6 +11,7 @@ interface AuthContextType {
     updateUserSubscription: (userId: string, plan: SubscriptionPlan, paymentScreenshot: string) => Promise<User | null>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
     refreshUser: () => Promise<void>;
+    changeEmail: (newEmail: string, currentPassword: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,9 +109,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return result;
     };
 
+    const changeEmail = async (newEmail: string, currentPassword: string) => {
+        if (!user) {
+            return { success: false, message: 'No user logged in.' };
+        }
+        const result = await api.changeEmail(user.id, newEmail, currentPassword);
+        if (!result.success) {
+            switch (result.code) {
+                case 'email_in_use':
+                    return { success: false, message: 'email_in_use' };
+                case 'invalid_password':
+                    return { success: false, message: 'invalid_password' };
+                default:
+                    return { success: false, message: 'unknown_error' };
+            }
+        }
+        if (result.user) {
+            setUser(result.user);
+            localStorage.setItem('user', JSON.stringify(result.user));
+        } else {
+            await refreshUser();
+        }
+        return { success: true, message: 'email_changed' };
+    };
+
     // Fix: Replaced JSX with React.createElement to be compatible with a .ts file extension.
     // The TypeScript compiler was misinterpreting JSX syntax as language operators, causing multiple parsing errors.
-    return React.createElement(AuthContext.Provider, { value: { user, loading, login, logout, register, updateUserSubscription, refreshUser, changePassword } }, children);
+    return React.createElement(AuthContext.Provider, { value: { user, loading, login, logout, register, updateUserSubscription, refreshUser, changePassword, changeEmail } }, children);
 };
 
 export const useAuth = () => {

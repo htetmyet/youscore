@@ -76,10 +76,38 @@ export interface League {
   logoUrl: string; // base64 encoded image
 }
 
+export interface LandingStatHighlight {
+  label: string;
+  value: string;
+  detail: string;
+}
+
+export interface LandingCredibilityPoint {
+  title: string;
+  description: string;
+}
+
+export interface LandingTestimonial {
+  quote: string;
+  author: string;
+  role: string;
+}
+
+export interface LandingSections {
+  heroTagline: string;
+  heroSubtitle: string;
+  primaryCta: string;
+  secondaryCta: string;
+  stats: LandingStatHighlight[];
+  credibility: LandingCredibilityPoint[];
+  testimonials: LandingTestimonial[];
+}
+
 export interface AppSettings {
   pageTitle: string;
   logoUrl: string | null; // base64 encoded image
   supportedLeagues: League[];
+  landingSections: LandingSections;
 }
 
 export interface WeeklyStat {

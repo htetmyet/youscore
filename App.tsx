@@ -18,6 +18,7 @@ import { translations } from './i18n/translations';
 import DashboardPage from './pages/DashboardPage';
 import AccountPage from './pages/AccountPage';
 import { NotificationProvider } from './hooks/useNotifications';
+import { defaultLandingSections } from './landingDefaults';
 
 // Page Context
 const PageContext = createContext<{
@@ -25,7 +26,7 @@ const PageContext = createContext<{
     setCurrentPage: React.Dispatch<React.SetStateAction<Page>>;
 }>({
     currentPage: 'home',
-    setCurrentPage: () => {},
+    setCurrentPage: () => { },
 });
 export const usePage = () => useContext(PageContext);
 
@@ -34,8 +35,8 @@ const SettingsContext = createContext<{
     settings: AppSettings;
     refreshSettings: () => Promise<void>;
 }>({
-    settings: { pageTitle: 'ProTips Football Predictor', logoUrl: null, supportedLeagues: [] },
-    refreshSettings: async () => {},
+    settings: { pageTitle: 'ProTips Football Predictor', logoUrl: null, supportedLeagues: [], landingSections: defaultLandingSections },
+    refreshSettings: async () => { },
 });
 export const useSettings = () => useContext(SettingsContext);
 
@@ -49,7 +50,7 @@ const LanguageContext = createContext<{
     t: (key: TranslationKey, replacements?: Record<string, string>) => string;
 }>({
     language: 'en',
-    setLanguage: () => {},
+    setLanguage: () => { },
     t: (key) => key,
 });
 export const useLanguage = () => useContext(LanguageContext);
@@ -81,7 +82,7 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
 
 
 const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [settings, setSettings] = useState<AppSettings>({ pageTitle: 'ProTips', logoUrl: null, supportedLeagues: [] });
+    const [settings, setSettings] = useState<AppSettings>({ pageTitle: 'ProTips', logoUrl: null, supportedLeagues: [], landingSections: defaultLandingSections });
     const { t } = useLanguage();
 
     const refreshSettings = useCallback(async () => {
@@ -96,10 +97,20 @@ const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children })
     useEffect(() => {
         refreshSettings();
     }, [refreshSettings]);
-    
+
     useEffect(() => {
         document.title = settings.pageTitle || t('appName');
-    }, [settings.pageTitle, t]);
+
+        // Update Favicon
+        const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+        if (link) {
+            if (settings.logoUrl) {
+                link.href = settings.logoUrl;
+            } else {
+                link.href = '/favicon.svg';
+            }
+        }
+    }, [settings.pageTitle, settings.logoUrl, t]);
 
     return (
         <SettingsContext.Provider value={{ settings, refreshSettings }}>
@@ -113,7 +124,8 @@ const AppContent: React.FC = () => {
     const { user, loading } = useAuth();
     const { currentPage, setCurrentPage } = usePage();
     const { t, language } = useLanguage();
-    
+    const { settings } = useSettings();
+
     const getSegmentType = (date: Date): 'mid-week' | 'weekend' => {
         const day = date.getDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
         if (day >= 1 && day <= 4) { // Monday to Thursday
@@ -124,7 +136,7 @@ const AppContent: React.FC = () => {
 
     const hasFreeAccess = (user: User | null): boolean => {
         if (!user || !user.freeAccess) return false;
-        
+
         const now = new Date();
         const todaySegment = getSegmentType(now);
 
@@ -146,16 +158,16 @@ const AppContent: React.FC = () => {
                 }
             } else if (user.role === 'admin') {
                 if (currentPage !== 'admin' && currentPage !== 'dashboard' && currentPage !== 'account' && currentPage !== 'predictions' && currentPage !== 'history') {
-                   setCurrentPage('admin');
+                    setCurrentPage('admin');
                 }
             } else if (user.subscription.status === 'active' || hasFreeAccess(user)) {
-                if(currentPage !== 'history' && currentPage !== 'predictions' && currentPage !== 'dashboard' && currentPage !== 'account') {
+                if (currentPage !== 'history' && currentPage !== 'predictions' && currentPage !== 'dashboard' && currentPage !== 'account') {
                     setCurrentPage('dashboard');
                 }
             } else {
-                 if (currentPage !== 'subscription' && currentPage !== 'account') {
+                if (currentPage !== 'subscription' && currentPage !== 'account') {
                     setCurrentPage('subscription');
-                 }
+                }
             }
         }
     }, [user, loading, currentPage, setCurrentPage]);
@@ -164,7 +176,7 @@ const AppContent: React.FC = () => {
         if (loading) {
             return <div className="flex justify-center items-center h-screen"><p>{t('loading')}</p></div>;
         }
-        
+
         switch (currentPage) {
             case 'login':
                 return <LoginPage />;
@@ -194,8 +206,21 @@ const AppContent: React.FC = () => {
             <main className="flex-grow container mx-auto p-4 md:p-8">
                 {renderPage()}
             </main>
-            <footer className="bg-surface border-t border-surface-light text-text-dark text-center p-5 mt-12">
-                <p>{t('footer_text', { year: new Date().getFullYear().toString() })}</p>
+            <footer className="bg-surface border-t border-surface-light text-text-dark py-8 mt-12">
+                <div className="container mx-auto px-4 flex flex-col items-center justify-center space-y-4">
+                    <div className="flex items-center space-x-3">
+                        {settings.logoUrl && (
+                            <img src={settings.logoUrl} alt="Site Logo" className="h-8 w-auto opacity-80 grayscale hover:grayscale-0 transition-all" />
+                        )}
+                        <span className="text-lg font-semibold text-text-DEFAULT">{settings.pageTitle}</span>
+                    </div>
+                    <p className="text-sm">
+                        {t('footer_text', {
+                            year: new Date().getFullYear().toString(),
+                            siteTitle: settings.pageTitle || t('appName'),
+                        })}
+                    </p>
+                </div>
             </footer>
         </div>
     );

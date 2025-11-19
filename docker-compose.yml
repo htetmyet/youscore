@@ -28,7 +28,7 @@ services:
       PORT: 8090
       DATABASE_URL: postgres://youscore:youscore@db:5432/youscore
       DATABASE_SSL: 'false'
-      CLIENT_ORIGIN: https://youscore.apexinnov.dev
+      CLIENT_ORIGIN: http://localhost:5173,https://youscore.apexinnov.dev
       DEVICE_LIMIT: 2
       ADMIN_EMAIL: admin@protips.com
       ADMIN_PASSWORD: admin123

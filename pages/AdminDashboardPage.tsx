@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/mockApi';
-import { User, Prediction, SubscriptionStatus, PredictionResult, SubscriptionPlan, League, Subscription } from '../types';
+import { User, Prediction, SubscriptionStatus, PredictionResult, SubscriptionPlan, League, Subscription, LandingStatHighlight, LandingCredibilityPoint, LandingTestimonial, LandingSections } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import Modal from '../components/Modal';
 import { SpinnerIcon, XCircleIcon } from '../components/icons';
 import { useSettings, useLanguage } from '../App';
+import { defaultLandingSections } from '../landingDefaults';
 
 const PaginationControls: React.FC<{
     currentPage: number;
@@ -83,6 +84,7 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+    const [isChangeEmailModalOpen, setIsChangeEmailModalOpen] = useState(false);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -90,24 +92,14 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
     const [newPassword, setNewPassword] = useState('');
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
     const [passwordError, setPasswordError] = useState('');
+    const [updatedEmail, setUpdatedEmail] = useState('');
+    const [emailModalError, setEmailModalError] = useState('');
+    const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
 
     const [approvingId, setApprovingId] = useState<string | null>(null);
 
-    const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-    const menuRef = useRef<HTMLDivElement>(null);
-    
     const [paymentScreenshot, setPaymentScreenshot] = useState<string | null>(null);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setOpenActionMenuId(null);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-    
     useEffect(() => {
         if (selectedUser) {
             setEditedSub({
@@ -117,6 +109,10 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
             });
         }
     }, [selectedUser]);
+    
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter]);
 
     const filteredUsers = useMemo(() => {
         return users
@@ -133,13 +129,11 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
     const openEditModal = (user: User) => {
         setSelectedUser(user);
         setIsEditModalOpen(true);
-        setOpenActionMenuId(null);
     };
 
     const openDeleteModal = (user: User) => {
         setSelectedUser(user);
         setIsDeleteModalOpen(true);
-        setOpenActionMenuId(null);
     };
 
     const openChangePasswordModal = (user: User) => {
@@ -148,7 +142,13 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
         setConfirmNewPassword('');
         setPasswordError('');
         setIsChangePasswordModalOpen(true);
-        setOpenActionMenuId(null);
+    };
+
+    const openChangeEmailModal = (user: User) => {
+        setSelectedUser(user);
+        setUpdatedEmail(user.email);
+        setEmailModalError('');
+        setIsChangeEmailModalOpen(true);
     };
 
     const handleApprove = async (userId: string) => {
@@ -156,7 +156,6 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
         await api.approveSubscription(userId);
         refreshUsers();
         setApprovingId(null);
-        setOpenActionMenuId(null);
     };
 
     const handleEditSubmit = async (e: React.FormEvent) => {
@@ -208,6 +207,29 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
         alert(`Password for ${selectedUser.email} has been changed.`);
     };
 
+    const handleChangeEmailSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedUser) return;
+        setEmailModalError('');
+        if (!updatedEmail.trim()) {
+            setEmailModalError(t('account_email_change_error_required'));
+            return;
+        }
+        setIsEmailSubmitting(true);
+        const result = await api.changeEmail(selectedUser.id, updatedEmail.trim());
+        setIsEmailSubmitting(false);
+        if (!result.success) {
+            if (result.code === 'email_in_use') {
+                setEmailModalError(t('account_email_change_error_in_use'));
+            } else {
+                setEmailModalError(t('account_password_change_error_generic'));
+            }
+            return;
+        }
+        setIsChangeEmailModalOpen(false);
+        refreshUsers();
+    };
+
     const getStatusClasses = (status: SubscriptionStatus) => {
         switch (status) {
             case SubscriptionStatus.ACTIVE: return 'bg-green-100 text-green-800';
@@ -222,6 +244,9 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
         const key = `status_${status}` as any;
         return t(key, { 'defaultValue': status });
     };
+
+    const actionHeaderClasses = "px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase sticky right-0 bg-surface-light border-l border-gray-200 z-20";
+    const actionCellClasses = "px-4 py-3 whitespace-nowrap text-sm sticky right-0 bg-surface border-l border-gray-200 z-10";
 
     return (
         <div>
@@ -305,6 +330,28 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
                 </form>
             </ActionModal>
 
+            <ActionModal isOpen={isChangeEmailModalOpen} onClose={() => setIsChangeEmailModalOpen(false)} title={t('modal_change_email_title')}>
+                <form onSubmit={handleChangeEmailSubmit}>
+                    <p className="text-sm text-text-light mb-4">{t('modal_change_email_desc', { email: selectedUser?.email || '' })}</p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-text-light">{t('account_email_change_new')}</label>
+                            <input
+                                type="email"
+                                value={updatedEmail}
+                                onChange={e => setUpdatedEmail(e.target.value)}
+                                className="mt-1 block w-full pl-3 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                            />
+                        </div>
+                        {emailModalError && <p className="text-red-500 text-sm">{emailModalError}</p>}
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-3">
+                        <button type="button" onClick={() => setIsChangeEmailModalOpen(false)} className="bg-surface-light text-text-light px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">{t('cancel')}</button>
+                        <button type="submit" disabled={isEmailSubmitting} className="bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-dark disabled:bg-gray-300 flex items-center">{isEmailSubmitting && <SpinnerIcon className="w-4 h-4 mr-2"/>}{t('modal_change_email_button')}</button>
+                    </div>
+                </form>
+            </ActionModal>
+
             <h3 className="text-xl font-semibold mb-4">{t('admin_users_all_title')} ({users.length})</h3>
 
             <div className="flex flex-col md:flex-row justify-between items-center mb-4 space-y-2 md:space-y-0">
@@ -331,59 +378,114 @@ const UserManagement: React.FC<{ users: User[], refreshUsers: () => void }> = ({
                 </div>
             </div>
 
-            <div className="bg-surface border border-gray-200 shadow-lg rounded-lg overflow-x-auto">
-                <table className="min-w-full">
-                    <thead className="bg-surface-light">
-                        <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_email')}</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_plan')}</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_status')}</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_expiry')}</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-surface divide-y divide-gray-200">
-                        {paginatedUsers.map(user => (
-                            <tr key={user.id} className="hover:bg-surface-light transition-colors">
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">{user.email}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm capitalize">{user.subscription.plan}</td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClasses(user.subscription.status)}`}>
-                                        {translateStatus(user.subscription.status)}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                    {user.subscription.expiryDate ? new Date(user.subscription.expiryDate).toLocaleDateString() : 'N/A'}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm relative">
-                                    <button onClick={() => setOpenActionMenuId(user.id === openActionMenuId ? null : user.id)} className="text-text-dark hover:text-primary p-1 rounded-full">
-                                        ...
-                                    </button>
-                                    {openActionMenuId === user.id && (
-                                        <div ref={menuRef} className="absolute right-0 mt-2 w-48 bg-surface rounded-md shadow-lg py-1 z-50 border border-gray-200">
+            <div className="bg-surface border border-gray-200 shadow-lg rounded-lg overflow-hidden">
+                <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-full md:min-w-[960px]">
+                        <thead className="bg-surface-light">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_email')}</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_plan')}</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_status')}</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-text-dark uppercase">{t('admin_users_table_expiry')}</th>
+                                <th className={actionHeaderClasses}>{t('admin_users_table_actions')}</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-surface divide-y divide-gray-200">
+                            {paginatedUsers.map(user => (
+                                <tr key={user.id} className="hover:bg-surface-light transition-colors">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm">{user.email}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm capitalize">{user.subscription.plan}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClasses(user.subscription.status)}`}>
+                                            {translateStatus(user.subscription.status)}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                        {user.subscription.expiryDate ? new Date(user.subscription.expiryDate).toLocaleDateString() : 'N/A'}
+                                    </td>
+                                    <td className={actionCellClasses}>
+                                        <div className="flex flex-wrap justify-end gap-2 min-w-[380px]">
                                             {user.subscription.status === SubscriptionStatus.PENDING && (
-                                                <button 
+                                                <button
                                                     onClick={() => handleApprove(user.id)}
                                                     disabled={approvingId === user.id}
-                                                    className="block w-full text-left px-4 py-2 text-sm text-text-DEFAULT hover:bg-surface-light disabled:opacity-50"
+                                                    className="px-3 py-1.5 text-xs font-semibold rounded-md bg-primary text-white hover:bg-primary-dark disabled:bg-gray-300"
                                                 >
                                                     {t('action_approve')}
                                                 </button>
                                             )}
-                                            <button onClick={() => openEditModal(user)} className="block w-full text-left px-4 py-2 text-sm text-text-DEFAULT hover:bg-surface-light">{t('action_edit')}</button>
-                                            <button onClick={() => openChangePasswordModal(user)} className="block w-full text-left px-4 py-2 text-sm text-text-DEFAULT hover:bg-surface-light">{t('action_change_password')}</button>
+                                            <button onClick={() => openEditModal(user)} className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                                {t('action_edit')}
+                                            </button>
+                                            <button onClick={() => openChangeEmailModal(user)} className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                                {t('action_change_email')}
+                                            </button>
+                                            <button onClick={() => openChangePasswordModal(user)} className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                                {t('action_change_password')}
+                                            </button>
                                             {user.subscription.paymentScreenshot && (
-                                                <button onClick={() => setPaymentScreenshot(user.subscription.paymentScreenshot)} className="block w-full text-left px-4 py-2 text-sm text-text-DEFAULT hover:bg-surface-light">{t('action_view_payment')}</button>
+                                                <button onClick={() => setPaymentScreenshot(user.subscription.paymentScreenshot)} className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                                    {t('action_view_payment')}
+                                                </button>
                                             )}
-                                            <button onClick={() => openDeleteModal(user)} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">{t('action_delete')}</button>
+                                            <button onClick={() => openDeleteModal(user)} className="px-3 py-1.5 text-xs font-semibold rounded-md border border-red-200 text-red-600 hover:bg-red-50">
+                                                {t('action_delete')}
+                                            </button>
                                         </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                         {filteredUsers.length === 0 && (<tr><td colSpan={5} className="text-center py-4 text-text-light">{t('admin_users_none_found')}</td></tr>)}
-                    </tbody>
-                </table>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredUsers.length === 0 && (<tr><td colSpan={5} className="text-center py-4 text-text-light">{t('admin_users_none_found')}</td></tr>)}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="md:hidden divide-y divide-gray-200">
+                    {paginatedUsers.map(user => (
+                        <div key={`${user.id}-card`} className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-base font-semibold text-text-DEFAULT break-words">{user.email}</p>
+                                    <p className="text-xs text-text-light mt-1">{t('admin_users_table_plan')}: <span className="capitalize">{user.subscription.plan}</span></p>
+                                    <p className="text-xs text-text-light">{t('admin_users_table_expiry')}: {user.subscription.expiryDate ? new Date(user.subscription.expiryDate).toLocaleDateString() : 'N/A'}</p>
+                                </div>
+                                <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClasses(user.subscription.status)}`}>
+                                    {translateStatus(user.subscription.status)}
+                                </span>
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {user.subscription.status === SubscriptionStatus.PENDING && (
+                                    <button
+                                        onClick={() => handleApprove(user.id)}
+                                        disabled={approvingId === user.id}
+                                        className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md bg-primary text-white hover:bg-primary-dark disabled:bg-gray-300"
+                                    >
+                                        {t('action_approve')}
+                                    </button>
+                                )}
+                                <button onClick={() => openEditModal(user)} className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                    {t('action_edit')}
+                                </button>
+                                <button onClick={() => openChangeEmailModal(user)} className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                    {t('action_change_email')}
+                                </button>
+                                <button onClick={() => openChangePasswordModal(user)} className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                    {t('action_change_password')}
+                                </button>
+                                {user.subscription.paymentScreenshot && (
+                                    <button onClick={() => setPaymentScreenshot(user.subscription.paymentScreenshot)} className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md border border-gray-300 text-text-dark hover:bg-surface-light">
+                                        {t('action_view_payment')}
+                                    </button>
+                                )}
+                                <button onClick={() => openDeleteModal(user)} className="flex-1 min-w-[140px] px-3 py-2 text-xs font-semibold rounded-md border border-red-200 text-red-600 hover:bg-red-50">
+                                    {t('action_delete')}
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    {filteredUsers.length === 0 && (
+                        <p className="py-6 text-center text-text-light">{t('admin_users_none_found')}</p>
+                    )}
+                </div>
                 <PaginationControls currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
             </div>
         </div>
@@ -980,6 +1082,9 @@ const PredictionHistory: React.FC<{ refreshCounter: number, onRefresh: () => voi
     const [finalScore, setFinalScore] = useState('');
     const [result, setResult] = useState<PredictionResult>(PredictionResult.WON);
     const [isSubmittingModal, setIsSubmittingModal] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [predictionToDelete, setPredictionToDelete] = useState<Prediction | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchHistory = useCallback(async () => {
         setLoading(true);
@@ -1014,6 +1119,21 @@ const PredictionHistory: React.FC<{ refreshCounter: number, onRefresh: () => voi
         onRefresh(); // Trigger refresh of pending list
         setIsSubmittingModal(false);
         setIsEditModalOpen(false);
+    };
+
+    const handleOpenDeleteModal = (prediction: Prediction) => {
+        setPredictionToDelete(prediction);
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!predictionToDelete) return;
+        setIsDeleting(true);
+        await api.deletePrediction(predictionToDelete.id);
+        await fetchHistory();
+        onRefresh();
+        setIsDeleting(false);
+        setIsDeleteModalOpen(false);
     };
 
     const totalPages = Math.ceil(predictions.length / PREDS_PER_PAGE);
@@ -1075,6 +1195,16 @@ const PredictionHistory: React.FC<{ refreshCounter: number, onRefresh: () => voi
                     </div>
                 </form>
             </ActionModal>
+            <ActionModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title={t('action_delete')}>
+                <p className="text-sm text-text-light">{t('modal_delete_prediction_confirm_text')}</p>
+                <p className="text-sm font-semibold text-text-DEFAULT mt-2">{predictionToDelete?.match}</p>
+                <div className="flex justify-end space-x-3">
+                    <button onClick={() => setIsDeleteModalOpen(false)} className="bg-surface-light text-text-light px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">{t('cancel')}</button>
+                    <button onClick={handleConfirmDelete} disabled={isDeleting} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 disabled:bg-gray-300 flex items-center">
+                        {isDeleting && <SpinnerIcon className="w-4 h-4 mr-2" />}{t('confirm_delete')}
+                    </button>
+                </div>
+            </ActionModal>
             <h3 className="text-xl font-semibold">{t('admin_history_title')} ({predictions.length})</h3>
             <div className="bg-surface border border-gray-200 shadow-lg rounded-lg overflow-x-auto">
                 <table className="min-w-full">
@@ -1104,7 +1234,10 @@ const PredictionHistory: React.FC<{ refreshCounter: number, onRefresh: () => voi
                                         </span>
                                     </td>
                                     <td className={commonTdClasses}>
-                                        <button onClick={() => handleOpenEditModal(p)} className="text-xs bg-gray-100 text-gray-800 hover:bg-gray-200 px-2 py-1 rounded">{t('action_edit_result')}</button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button onClick={() => handleOpenEditModal(p)} className="text-xs bg-gray-100 text-gray-800 hover:bg-gray-200 px-2 py-1 rounded">{t('action_edit_result')}</button>
+                                            <button onClick={() => handleOpenDeleteModal(p)} className="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded">{t('action_delete')}</button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -1132,6 +1265,14 @@ const SettingsManagement: React.FC = () => {
     const [newLeagueLogo, setNewLeagueLogo] = useState<string | null>(null); // For base64 upload
     const [newLeagueUrl, setNewLeagueUrl] = useState(''); // For URL input
     const [logoInputMethod, setLogoInputMethod] = useState<'upload' | 'url'>('upload');
+
+    const [heroTagline, setHeroTagline] = useState('');
+    const [heroSubtitle, setHeroSubtitle] = useState('');
+    const [heroPrimaryCta, setHeroPrimaryCta] = useState('');
+    const [heroSecondaryCta, setHeroSecondaryCta] = useState('');
+    const [landingStats, setLandingStats] = useState<LandingStatHighlight[]>([]);
+    const [landingCredibility, setLandingCredibility] = useState<LandingCredibilityPoint[]>([]);
+    const [landingTestimonials, setLandingTestimonials] = useState<LandingTestimonial[]>([]);
     
     useEffect(() => {
         if (settings) {
@@ -1139,6 +1280,15 @@ const SettingsManagement: React.FC = () => {
             setLogo(settings.logoUrl);
             setLogoPreview(settings.logoUrl);
             setLeagues(settings.supportedLeagues || []);
+
+            const landing = settings.landingSections ?? defaultLandingSections;
+            setHeroTagline(landing.heroTagline);
+            setHeroSubtitle(landing.heroSubtitle);
+            setHeroPrimaryCta(landing.primaryCta);
+            setHeroSecondaryCta(landing.secondaryCta);
+            setLandingStats((landing.stats || []).map((stat) => ({ ...stat })));
+            setLandingCredibility((landing.credibility || []).map((point) => ({ ...point })));
+            setLandingTestimonials((landing.testimonials || []).map((testimonial) => ({ ...testimonial })));
         }
     }, [settings]);
 
@@ -1185,11 +1335,60 @@ const SettingsManagement: React.FC = () => {
         setLeagues(prev => prev.filter(l => l.name !== leagueName));
     };
 
+    const handleStatChange = (index: number, field: keyof LandingStatHighlight, value: string) => {
+        setLandingStats(prev => prev.map((stat, i) => (i === index ? { ...stat, [field]: value } : stat)));
+    };
+    const addStatHighlight = () => setLandingStats(prev => [...prev, { label: '', value: '', detail: '' }]);
+    const removeStatHighlight = (index: number) => setLandingStats(prev => prev.filter((_, i) => i !== index));
+
+    const handleCredibilityChange = (index: number, field: keyof LandingCredibilityPoint, value: string) => {
+        setLandingCredibility(prev => prev.map((point, i) => (i === index ? { ...point, [field]: value } : point)));
+    };
+    const addCredibilityPoint = () => setLandingCredibility(prev => [...prev, { title: '', description: '' }]);
+    const removeCredibilityPoint = (index: number) => setLandingCredibility(prev => prev.filter((_, i) => i !== index));
+
+    const handleTestimonialChange = (index: number, field: keyof LandingTestimonial, value: string) => {
+        setLandingTestimonials(prev => prev.map((testimonial, i) => (i === index ? { ...testimonial, [field]: value } : testimonial)));
+    };
+    const addTestimonial = () => setLandingTestimonials(prev => [...prev, { quote: '', author: '', role: '' }]);
+    const removeTestimonial = (index: number) => setLandingTestimonials(prev => prev.filter((_, i) => i !== index));
+
     const handleSave = async () => {
         setIsSaving(true);
         setSaveMessage('');
+        const sanitizedStats = landingStats
+            .map((stat) => ({
+                label: stat.label?.trim() ?? '',
+                value: stat.value?.trim() ?? '',
+                detail: stat.detail?.trim() ?? '',
+            }))
+            .filter((stat) => stat.label || stat.value || stat.detail);
+        const sanitizedCredibility = landingCredibility
+            .map((point) => ({
+                title: point.title?.trim() ?? '',
+                description: point.description?.trim() ?? '',
+            }))
+            .filter((point) => point.title || point.description);
+        const sanitizedTestimonials = landingTestimonials
+            .map((testimonial) => ({
+                quote: testimonial.quote?.trim() ?? '',
+                author: testimonial.author?.trim() ?? '',
+                role: testimonial.role?.trim() ?? '',
+            }))
+            .filter((testimonial) => testimonial.quote || testimonial.author || testimonial.role);
+
+        const landingPayload: LandingSections = {
+            heroTagline: heroTagline || defaultLandingSections.heroTagline,
+            heroSubtitle: heroSubtitle || defaultLandingSections.heroSubtitle,
+            primaryCta: heroPrimaryCta || defaultLandingSections.primaryCta,
+            secondaryCta: heroSecondaryCta || defaultLandingSections.secondaryCta,
+            stats: sanitizedStats.length ? sanitizedStats : defaultLandingSections.stats,
+            credibility: sanitizedCredibility.length ? sanitizedCredibility : defaultLandingSections.credibility,
+            testimonials: sanitizedTestimonials.length ? sanitizedTestimonials : defaultLandingSections.testimonials,
+        };
+
         try {
-            await api.updateSettings({ pageTitle, logoUrl: logo, supportedLeagues: leagues });
+            await api.updateSettings({ pageTitle, logoUrl: logo, supportedLeagues: leagues, landingSections: landingPayload });
             await refreshSettings();
             setSaveMessage(t('admin_settings_save_success'));
         } catch (error) {
@@ -1296,6 +1495,137 @@ const SettingsManagement: React.FC = () => {
                     ) : (
                         <p className="text-sm text-text-light text-center py-4">{t('admin_settings_leagues_no_leagues')}</p>
                     )}
+                </div>
+            </div>
+            
+            <div className="bg-surface border border-gray-200 p-8 rounded-lg shadow-lg">
+                <h3 className="text-xl font-semibold">{t('admin_settings_landing_title')}</h3>
+                <p className="text-sm text-text-light mt-1 mb-6">{t('admin_settings_landing_desc')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-text-DEFAULT">{t('admin_settings_landing_hero_tagline')}</label>
+                        <input type="text" value={heroTagline} onChange={(e) => setHeroTagline(e.target.value)} className={inputClasses} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-text-DEFAULT">{t('admin_settings_landing_hero_subtitle')}</label>
+                        <input type="text" value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} className={inputClasses} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-text-DEFAULT">{t('admin_settings_landing_cta_primary')}</label>
+                        <input type="text" value={heroPrimaryCta} onChange={(e) => setHeroPrimaryCta(e.target.value)} className={inputClasses} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-text-DEFAULT">{t('admin_settings_landing_cta_secondary')}</label>
+                        <input type="text" value={heroSecondaryCta} onChange={(e) => setHeroSecondaryCta(e.target.value)} className={inputClasses} />
+                    </div>
+                </div>
+
+                <div className="mt-8 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-lg font-medium">{t('admin_settings_landing_stats_title')}</h4>
+                            <p className="text-sm text-text-light">{t('admin_settings_landing_stats_desc')}</p>
+                        </div>
+                        <button onClick={addStatHighlight} className="bg-secondary text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark">
+                            {t('admin_settings_landing_stats_add')}
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {landingStats.map((stat, index) => (
+                            <div key={`stat-${index}`} className="p-4 border border-gray-200 rounded-lg bg-background">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h5 className="text-sm font-semibold text-text-DEFAULT">{t('admin_settings_landing_stats_label')} #{index + 1}</h5>
+                                    <button onClick={() => removeStatHighlight(index)} className="text-red-500 hover:text-red-700 text-sm">
+                                        {t('admin_settings_remove_item')}
+                                    </button>
+                                </div>
+                                <div className="grid md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_stats_label')}</label>
+                                        <input type="text" value={stat.label} onChange={(e) => handleStatChange(index, 'label', e.target.value)} className={inputClasses} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_stats_value')}</label>
+                                        <input type="text" value={stat.value} onChange={(e) => handleStatChange(index, 'value', e.target.value)} className={inputClasses} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_stats_detail')}</label>
+                                        <input type="text" value={stat.detail} onChange={(e) => handleStatChange(index, 'detail', e.target.value)} className={inputClasses} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-8 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-lg font-medium">{t('admin_settings_landing_credibility_title')}</h4>
+                            <p className="text-sm text-text-light">{t('admin_settings_landing_credibility_desc')}</p>
+                        </div>
+                        <button onClick={addCredibilityPoint} className="bg-secondary text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark">
+                            {t('admin_settings_landing_credibility_add')}
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {landingCredibility.map((point, index) => (
+                            <div key={`credibility-${index}`} className="p-4 border border-gray-200 rounded-lg bg-background">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h5 className="text-sm font-semibold text-text-DEFAULT">{t('admin_settings_landing_credibility_heading')} #{index + 1}</h5>
+                                    <button onClick={() => removeCredibilityPoint(index)} className="text-red-500 hover:text-red-700 text-sm">
+                                        {t('admin_settings_remove_item')}
+                                    </button>
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_credibility_heading')}</label>
+                                        <input type="text" value={point.title} onChange={(e) => handleCredibilityChange(index, 'title', e.target.value)} className={inputClasses} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_credibility_body')}</label>
+                                        <textarea value={point.description} onChange={(e) => handleCredibilityChange(index, 'description', e.target.value)} className={`${inputClasses} h-24`} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-8 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-lg font-medium">{t('admin_settings_landing_testimonials_title')}</h4>
+                            <p className="text-sm text-text-light">{t('admin_settings_landing_testimonials_desc')}</p>
+                        </div>
+                        <button onClick={addTestimonial} className="bg-secondary text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark">
+                            {t('admin_settings_landing_testimonials_add')}
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {landingTestimonials.map((testimonial, index) => (
+                            <div key={`testimonial-${index}`} className="p-4 border border-gray-200 rounded-lg bg-background">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h5 className="text-sm font-semibold text-text-DEFAULT">{t('admin_settings_landing_testimonials_quote')} #{index + 1}</h5>
+                                    <button onClick={() => removeTestimonial(index)} className="text-red-500 hover:text-red-700 text-sm">
+                                        {t('admin_settings_remove_item')}
+                                    </button>
+                                </div>
+                                <div className="grid md:grid-cols-3 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_testimonials_quote')}</label>
+                                        <textarea value={testimonial.quote} onChange={(e) => handleTestimonialChange(index, 'quote', e.target.value)} className={`${inputClasses} h-24`} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-text-light">{t('admin_settings_landing_testimonials_author')}</label>
+                                        <input type="text" value={testimonial.author} onChange={(e) => handleTestimonialChange(index, 'author', e.target.value)} className={inputClasses} />
+                                        <label className="block text-xs font-medium text-text-light mt-3">{t('admin_settings_landing_testimonials_role')}</label>
+                                        <input type="text" value={testimonial.role} onChange={(e) => handleTestimonialChange(index, 'role', e.target.value)} className={inputClasses} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 

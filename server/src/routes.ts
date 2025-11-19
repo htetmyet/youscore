@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import {
   approveSubscription,
+  changeEmail,
   changePassword,
   createUser,
   deleteUser,
@@ -176,6 +177,27 @@ router.post('/users/:id/password', asyncHandler(async (req, res) => {
   res.status(status).json(result);
 }));
 
+router.post('/users/:id/email', asyncHandler(async (req, res) => {
+  const paramSchema = z.object({ id: z.string().uuid() });
+  const bodySchema = z.object({
+    newEmail: z.string().email(),
+    currentPassword: z.string().min(6).optional(),
+  });
+  const { id } = paramSchema.parse(req.params);
+  const { newEmail, currentPassword } = bodySchema.parse(req.body);
+  const result = await changeEmail(id, newEmail, currentPassword);
+  if (!result.success) {
+    const statusMap: Record<string, number> = {
+      email_in_use: 409,
+      invalid_password: 400,
+      user_not_found: 404,
+    };
+    const status = statusMap[result.code ?? ''] ?? 400;
+    return res.status(status).json({ code: result.code ?? 'email_change_failed' });
+  }
+  return res.json({ user: result.user });
+}));
+
 const predictionInputSchema = z.object({
   date: z.string(),
   league: z.string(),
@@ -243,6 +265,33 @@ router.get('/settings', asyncHandler(async (_req, res) => {
 }));
 
 router.put('/settings', asyncHandler(async (req, res) => {
+  const landingStatSchema = z.object({
+    label: z.string(),
+    value: z.string(),
+    detail: z.string(),
+  });
+
+  const landingCredSchema = z.object({
+    title: z.string(),
+    description: z.string(),
+  });
+
+  const landingTestimonialSchema = z.object({
+    quote: z.string(),
+    author: z.string(),
+    role: z.string(),
+  });
+
+  const landingSectionsSchema = z.object({
+    heroTagline: z.string(),
+    heroSubtitle: z.string(),
+    primaryCta: z.string(),
+    secondaryCta: z.string(),
+    stats: z.array(landingStatSchema),
+    credibility: z.array(landingCredSchema),
+    testimonials: z.array(landingTestimonialSchema),
+  });
+
   const schema = z.object({
     pageTitle: z.string().optional(),
     logoUrl: z.string().nullable().optional(),
@@ -250,6 +299,7 @@ router.put('/settings', asyncHandler(async (req, res) => {
       name: z.string(),
       logoUrl: z.string(),
     })).optional(),
+    landingSections: landingSectionsSchema.optional(),
   });
   const payload = schema.parse(req.body);
   const settings = await updateSettings(payload);
