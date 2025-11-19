@@ -110,20 +110,20 @@ export const getUserByEmail = async (email: string) => {
 export const getUserCredentialsByEmail = async (email: string) => getUserRowByEmail(email);
 
 export const ensureAdminUser = async () => {
-  const hash = await bcrypt.hash(config.adminPassword, 10);
   const normalizedEmail = config.adminEmail.toLowerCase();
   const existingByEmail = await getUserRowByEmail(normalizedEmail);
   if (existingByEmail) {
-    await pool.query(
-      `UPDATE users
-       SET password_hash = $2,
-           role = 'admin',
-           subscription_plan = 'none',
-           subscription_status = 'inactive',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [existingByEmail.id, hash]
-    );
+    if (existingByEmail.role !== 'admin') {
+      await pool.query(
+        `UPDATE users
+         SET role = 'admin',
+             subscription_plan = 'none',
+             subscription_status = 'inactive',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [existingByEmail.id]
+      );
+    }
     return;
   }
 
@@ -132,16 +132,16 @@ export const ensureAdminUser = async () => {
     await pool.query(
       `UPDATE users
        SET email = $2,
-           password_hash = $3,
            subscription_plan = 'none',
            subscription_status = 'inactive',
            updated_at = NOW()
        WHERE id = $1`,
-      [rows[0].id, normalizedEmail, hash]
+      [rows[0].id, normalizedEmail]
     );
     return;
   }
 
+  const hash = await bcrypt.hash(config.adminPassword, 10);
   const id = randomUUID();
   await pool.query(
     `INSERT INTO users (id, email, password_hash, role, subscription_plan, subscription_status)
@@ -332,4 +332,39 @@ export const changePassword = async (userId: string, newPassword: string, curren
     [userId, hash]
   );
   return { success: true, message: 'Password changed successfully.' };
+};
+
+export const changeEmail = async (userId: string, newEmail: string, currentPassword?: string) => {
+  const normalizedEmail = newEmail.toLowerCase();
+  const { rows } = await pool.query(`SELECT id, password_hash FROM users WHERE id = $1`, [userId]);
+  if (!rows[0]) {
+    return { success: false, code: 'user_not_found' };
+  }
+
+  if (currentPassword) {
+    const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!match) {
+      return { success: false, code: 'invalid_password' };
+    }
+  }
+
+  const emailOwner = await getUserRowByEmail(normalizedEmail);
+  if (emailOwner && emailOwner.id !== userId) {
+    return { success: false, code: 'email_in_use' };
+  }
+
+  await pool.query(
+    `UPDATE users
+     SET email = $1,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [normalizedEmail, userId]
+  );
+
+  const updatedUser = await getUserById(userId);
+  if (!updatedUser) {
+    return { success: false, code: 'user_not_found' };
+  }
+
+  return { success: true, user: updatedUser };
 };

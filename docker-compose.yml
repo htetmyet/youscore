@@ -28,7 +28,7 @@ services:
       PORT: 8090
       DATABASE_URL: postgres://youscore:youscore@db:5432/youscore
       DATABASE_SSL: 'false'
-      CLIENT_ORIGIN: http://192.168.1.40:8090
+      CLIENT_ORIGIN: https://youscore.apexinnov.dev
       DEVICE_LIMIT: 2
       ADMIN_EMAIL: admin@protips.com
       ADMIN_PASSWORD: admin123
@@ -42,7 +42,7 @@ services:
       context: .
       dockerfile: Dockerfile.web
       args:
-        VITE_API_BASE_URL: http://192.168.1.40:8091/api
+        VITE_API_BASE_URL: https://youscore.apexinnov.dev/api
     depends_on:
       - api
     ports:
