@@ -164,6 +164,54 @@ export const updatePredictionResult = async (
   return mapPredictionRow(rows[0]);
 };
 
+export const updatePredictionDetails = async (
+  predictionId: string,
+  updates: {
+    date: string;
+    league: string;
+    match: string;
+    tip: string;
+    odds: number;
+    type: 'big' | 'small';
+    confidence?: number;
+    recommendedStake?: number;
+    probMax?: number;
+  }
+) => {
+  const recommendedStake = updates.recommendedStake ?? calculateRecommendedStake(updates.confidence);
+  const { rows } = await pool.query<PredictionRow>(
+    `UPDATE predictions
+     SET match_date = $2,
+         league = $3,
+         match = $4,
+         tip = $5,
+         odds = $6,
+         prediction_type = $7,
+         confidence = $8,
+         recommended_stake = $9,
+         prob_max = $10,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [
+      predictionId,
+      updates.date,
+      updates.league,
+      updates.match,
+      updates.tip,
+      updates.odds,
+      updates.type,
+      updates.confidence ?? null,
+      recommendedStake ?? null,
+      updates.probMax ?? null,
+    ]
+  );
+  if (!rows[0]) {
+    return null;
+  }
+  return mapPredictionRow(rows[0]);
+};
+
 export const deletePrediction = async (predictionId: string) => {
   const result = await pool.query(`DELETE FROM predictions WHERE id = $1`, [predictionId]);
   const deletedCount = result.rowCount ?? 0;

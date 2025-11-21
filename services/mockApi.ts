@@ -187,6 +187,27 @@ class ApiClient {
         return data.predictions;
     }
 
+    async updatePredictionDetails(
+        predictionId: string,
+        payload: {
+            date: string;
+            league: string;
+            match: string;
+            tip: string;
+            odds: number;
+            type: 'big' | 'small';
+            confidence?: number;
+            recommendedStake?: number;
+            probMax?: number;
+        }
+    ): Promise<Prediction | null> {
+        const data = await this.request<{ prediction: Prediction }>(`/predictions/${predictionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        });
+        return data.prediction;
+    }
+
     async updatePredictionResult(predictionId: string, result: PredictionResult, finalScore?: string): Promise<Prediction | null> {
         const data = await this.request<{ prediction: Prediction }>(`/predictions/${predictionId}/result`, {
             method: 'PATCH',

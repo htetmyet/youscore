@@ -23,6 +23,7 @@ import {
   deletePrediction,
   fetchPredictions,
   fetchWeeklyStats,
+  updatePredictionDetails,
   updatePredictionResult,
 } from './services/predictionService';
 import { getSettings, updateSettings } from './services/settingsService';
@@ -238,6 +239,28 @@ router.patch('/predictions/:id/result', asyncHandler(async (req, res) => {
   const { id } = paramSchema.parse(req.params);
   const { result, finalScore } = bodySchema.parse(req.body);
   const prediction = await updatePredictionResult(id, result, finalScore);
+  if (!prediction) {
+    return res.status(404).json({ message: 'Prediction not found' });
+  }
+  res.json({ prediction });
+}));
+
+router.patch('/predictions/:id', asyncHandler(async (req, res) => {
+  const paramSchema = z.object({ id: z.string().uuid() });
+  const bodySchema = z.object({
+    date: z.string(),
+    league: z.string(),
+    match: z.string(),
+    tip: z.string(),
+    odds: z.coerce.number().positive(),
+    type: z.enum(['big', 'small']),
+    confidence: z.coerce.number().min(0).max(100).optional(),
+    recommendedStake: z.coerce.number().min(1).optional(),
+    probMax: z.coerce.number().min(0).max(1).optional(),
+  });
+  const { id } = paramSchema.parse(req.params);
+  const payload = bodySchema.parse(req.body);
+  const prediction = await updatePredictionDetails(id, payload);
   if (!prediction) {
     return res.status(404).json({ message: 'Prediction not found' });
   }

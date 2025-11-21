@@ -557,6 +557,12 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
     const [tipFilter, setTipFilter] = useState('');
     const [probMaxFilter, setProbMaxFilter] = useState('');
     const PREDS_PER_PAGE = 35;
+    const [pendingViewMode, setPendingViewMode] = useState<'table' | 'card'>('table');
+    const [pendingLeagueFilter, setPendingLeagueFilter] = useState('all');
+    const [pendingTypeFilter, setPendingTypeFilter] = useState<'all' | 'big' | 'small'>('all');
+    const [pendingMinOdds, setPendingMinOdds] = useState('');
+    const [pendingMaxOdds, setPendingMaxOdds] = useState('');
+    const [pendingSearch, setPendingSearch] = useState('');
 
     const leagueMapping: { [key: string]: string } = {
         E0: 'Eng Premier League',
@@ -732,6 +738,67 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
             [field]: field === 'type' ? (value as 'big' | 'small') : value,
             ...(field === 'type' && value === 'small' ? { confidence: '' } : {}),
         }));
+    };
+    
+    const pendingLeagues = useMemo(() => Array.from(new Set(predictions.map(p => p.league))).sort(), [predictions]);
+
+    const filteredPendingPredictions = useMemo(() => {
+        const search = pendingSearch.trim().toLowerCase();
+        const minOddsNum = parseFloat(pendingMinOdds);
+        const maxOddsNum = parseFloat(pendingMaxOdds);
+        return predictions.filter(p => {
+            if (pendingLeagueFilter !== 'all' && p.league !== pendingLeagueFilter) return false;
+            if (pendingTypeFilter !== 'all' && p.type !== pendingTypeFilter) return false;
+            if (!isNaN(minOddsNum) && p.odds < minOddsNum) return false;
+            if (!isNaN(maxOddsNum) && p.odds > maxOddsNum) return false;
+            if (search) {
+                const text = `${p.match} ${p.tip} ${p.league}`.toLowerCase();
+                if (!text.includes(search)) return false;
+            }
+            return true;
+        });
+    }, [predictions, pendingLeagueFilter, pendingTypeFilter, pendingMinOdds, pendingMaxOdds, pendingSearch]);
+
+    const handleResetPendingFilters = () => {
+        setPendingLeagueFilter('all');
+        setPendingTypeFilter('all');
+        setPendingMinOdds('');
+        setPendingMaxOdds('');
+        setPendingSearch('');
+    };
+
+    const activePendingFilters = useMemo(() => {
+        const chips: { key: string; label: string; value: string; onRemove: () => void }[] = [];
+        if (pendingSearch.trim()) {
+            chips.push({ key: 'search', label: t('predictions_filter_search'), value: pendingSearch.trim(), onRemove: () => setPendingSearch('') });
+        }
+        if (pendingLeagueFilter !== 'all') {
+            chips.push({ key: 'league', label: t('predictions_filter_league'), value: pendingLeagueFilter, onRemove: () => setPendingLeagueFilter('all') });
+        }
+        if (pendingTypeFilter !== 'all') {
+            const label = pendingTypeFilter === 'big' ? t('admin_preds_single_type_big') : t('admin_preds_single_type_small');
+            chips.push({ key: 'type', label: t('predictions_filter_tip_type'), value: label, onRemove: () => setPendingTypeFilter('all') });
+        }
+        if (pendingMinOdds.trim()) {
+            chips.push({ key: 'minOdds', label: t('predictions_filter_odds_min'), value: pendingMinOdds, onRemove: () => setPendingMinOdds('') });
+        }
+        if (pendingMaxOdds.trim()) {
+            chips.push({ key: 'maxOdds', label: t('predictions_filter_odds_max'), value: pendingMaxOdds, onRemove: () => setPendingMaxOdds('') });
+        }
+        return chips;
+    }, [pendingSearch, pendingLeagueFilter, pendingTypeFilter, pendingMinOdds, pendingMaxOdds, t]);
+
+    const formatDateDisplay = (value: string) => {
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+            return parsed.toLocaleDateString();
+        }
+        return value.split('T')[0] || value;
+    };
+
+    const formatOdds = (value: number | string) => {
+        const num = typeof value === 'number' ? value : parseFloat(value);
+        return isFinite(num) ? num.toFixed(2) : 'N/A';
     };
 
     const handleConfirmDetailsUpdate = async (e: React.FormEvent) => {
@@ -1206,41 +1273,203 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
 
             {/* Pending Predictions */}
             <div>
-                 <h3 className="text-xl font-semibold mb-4">{t('admin_preds_pending_title')} ({predictions.length})</h3>
-                 <div className="bg-surface border border-gray-200 shadow-lg rounded-lg overflow-x-auto">
-                     <table className="min-w-full">
-                         <thead className="bg-surface-light">
-                            <tr>
-                                <th className={commonThClasses}>{t('admin_preds_staged_match')}</th>
-                                <th className={commonThClasses}>{t('admin_preds_staged_tip')}</th>
-                                <th className={commonThClasses}>{t('admin_preds_staged_odds')}</th>
-                                <th className={commonThClasses}>{t('admin_preds_pending_actions')}</th>
-                            </tr>
-                        </thead>
-                         <tbody className="bg-surface divide-y divide-gray-200">
-                             {loading ? (
-                                <tr><td colSpan={4} className="text-center py-4"><SpinnerIcon className="w-6 h-6 mx-auto text-primary"/></td></tr>
-                             ) : predictions.length === 0 ? (
-                                <tr><td colSpan={4} className="text-center py-4 text-text-light">{t('admin_preds_pending_none')}</td></tr>
-                             ) : (
-                                predictions.map(p => (
-                                    <tr key={p.id} className="hover:bg-surface-light transition-colors">
-                                        <td className={commonTdClasses}>{p.match}</td>
-                                        <td className={commonTdClasses}>{p.tip}</td>
-                                        <td className={`${commonTdClasses} font-semibold text-accent-dark`}>{isFinite(p.odds) ? p.odds.toFixed(2) : 'N/A'}</td>
-                                        <td className={commonTdClasses}>
-                                            <div className="flex space-x-2">
-                                                <button onClick={() => handleOpenEditDetailsModal(p)} className="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-1 rounded">{t('action_edit_details')}</button>
-                                                <button onClick={() => handleOpenUpdateModal(p)} className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2 py-1 rounded">{t('action_update')}</button>
-                                                <button onClick={() => handleOpenRemoveModal(p)} className="text-xs bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded">{t('action_remove')}</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                             )}
-                        </tbody>
-                    </table>
-                </div>
+                 <h3 className="text-xl font-semibold mb-4 flex items-center justify-between">
+                    <span>{t('admin_preds_pending_title')} ({predictions.length})</span>
+                    <span className="text-sm text-text-light">{filteredPendingPredictions.length} {t('predictions_filter_results_label')}</span>
+                 </h3>
+
+                 <div className="bg-surface border border-gray-200 rounded-lg shadow-sm p-4 mb-4">
+                    <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs uppercase font-semibold text-text-light">{t('predictions_view_label')}</span>
+                            <div className="inline-flex rounded-md shadow-sm border border-gray-200 overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingViewMode('table')}
+                                    className={`px-3 py-2 text-sm font-semibold ${pendingViewMode === 'table' ? 'bg-primary text-white' : 'bg-surface hover:bg-surface-light text-text-dark'}`}
+                                >
+                                    {t('predictions_view_list')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPendingViewMode('card')}
+                                    className={`px-3 py-2 text-sm font-semibold ${pendingViewMode === 'card' ? 'bg-primary text-white' : 'bg-surface hover:bg-surface-light text-text-dark'}`}
+                                >
+                                    {t('predictions_view_card')}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 w-full">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-semibold text-text-light mb-1">{t('predictions_filter_search')}</label>
+                                <input
+                                    value={pendingSearch}
+                                    onChange={e => setPendingSearch(e.target.value)}
+                                    placeholder={t('predictions_filter_search_placeholder')}
+                                    className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm placeholder-text-dark focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-text-light mb-1">{t('predictions_filter_league')}</label>
+                                <select
+                                    value={pendingLeagueFilter}
+                                    onChange={e => setPendingLeagueFilter(e.target.value)}
+                                    className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                >
+                                    <option value="all">{t('predictions_filter_all')}</option>
+                                    {pendingLeagues.map(league => (
+                                        <option key={league} value={league}>{league}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-text-light mb-1">{t('predictions_filter_tip_type')}</label>
+                                <select
+                                    value={pendingTypeFilter}
+                                    onChange={e => setPendingTypeFilter(e.target.value as 'all' | 'big' | 'small')}
+                                    className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                >
+                                    <option value="all">{t('predictions_filter_all')}</option>
+                                    <option value="big">{t('admin_preds_single_type_big')}</option>
+                                    <option value="small">{t('admin_preds_single_type_small')}</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="w-1/2">
+                                    <label className="block text-xs font-semibold text-text-light mb-1">{t('predictions_filter_odds_min')}</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={pendingMinOdds}
+                                        onChange={e => setPendingMinOdds(e.target.value)}
+                                        className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                    />
+                                </div>
+                                <div className="w-1/2">
+                                    <label className="block text-xs font-semibold text-text-light mb-1">{t('predictions_filter_odds_max')}</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={pendingMaxOdds}
+                                        onChange={e => setPendingMaxOdds(e.target.value)}
+                                        className="w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end">
+                            <button
+                                type="button"
+                                onClick={handleResetPendingFilters}
+                                className="text-sm font-semibold text-primary hover:text-primary-dark"
+                            >
+                                {t('predictions_filter_reset')}
+                            </button>
+                        </div>
+                    </div>
+                 </div>
+
+                 {activePendingFilters.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        <span className="text-xs uppercase font-semibold text-text-light tracking-wide">{t('predictions_filter_active')}</span>
+                        {activePendingFilters.map(chip => (
+                            <button
+                                key={chip.key}
+                                onClick={chip.onRemove}
+                                className="flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary hover:bg-primary/20"
+                            >
+                                {chip.label}: <span className="font-bold">{chip.value}</span>
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        ))}
+                    </div>
+                 )}
+
+                 {pendingViewMode === 'table' ? (
+                    <div className="bg-surface border border-gray-200 shadow-lg rounded-lg overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead className="bg-surface-light">
+                                <tr>
+                                    <th className={commonThClasses}>{t('admin_preds_staged_date')}</th>
+                                    <th className={commonThClasses}>{t('admin_preds_staged_league')}</th>
+                                    <th className={commonThClasses}>{t('admin_preds_staged_match')}</th>
+                                    <th className={commonThClasses}>{t('admin_preds_staged_tip')}</th>
+                                    <th className={commonThClasses}>{t('admin_preds_staged_odds')}</th>
+                                    <th className={commonThClasses}>{t('admin_preds_pending_actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-surface divide-y divide-gray-200">
+                                {loading ? (
+                                    <tr><td colSpan={6} className="text-center py-4"><SpinnerIcon className="w-6 h-6 mx-auto text-primary"/></td></tr>
+                                ) : filteredPendingPredictions.length === 0 ? (
+                                    <tr><td colSpan={6} className="text-center py-4 text-text-light">{t('admin_preds_pending_none')}</td></tr>
+                                ) : (
+                                    filteredPendingPredictions.map(p => (
+                                        <tr key={p.id} className="hover:bg-surface-light transition-colors">
+                                            <td className={commonTdClasses}>{formatDateDisplay(p.date)}</td>
+                                            <td className={commonTdClasses}>{p.league}</td>
+                                            <td className={commonTdClasses}>{p.match}</td>
+                                            <td className={commonTdClasses}>{p.tip}</td>
+                                            <td className={`${commonTdClasses} font-semibold text-accent-dark`}>{formatOdds(p.odds)}</td>
+                                            <td className={commonTdClasses}>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button onClick={() => handleOpenEditDetailsModal(p)} className="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-1 rounded">{t('action_edit_details')}</button>
+                                                    <button onClick={() => handleOpenUpdateModal(p)} className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2 py-1 rounded">{t('action_update')}</button>
+                                                    <button onClick={() => handleOpenRemoveModal(p)} className="text-xs bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded">{t('action_remove')}</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                 )}
+                            </tbody>
+                        </table>
+                    </div>
+                 ) : (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {loading ? (
+                            <div className="col-span-full flex justify-center py-6"><SpinnerIcon className="w-6 h-6 text-primary"/></div>
+                        ) : filteredPendingPredictions.length === 0 ? (
+                            <p className="col-span-full text-center text-text-light py-6">{t('admin_preds_pending_none')}</p>
+                        ) : (
+                            filteredPendingPredictions.map(p => (
+                                <div key={p.id} className="bg-surface border border-gray-200 rounded-lg shadow-md p-4 flex flex-col gap-3">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-xs font-semibold text-text-light uppercase">{p.league}</p>
+                                            <p className="text-xs text-text-dark">{formatDateDisplay(p.date)}</p>
+                                        </div>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${p.type === 'big' ? 'bg-secondary/10 text-secondary-dark' : 'bg-primary/10 text-primary-dark'}`}>
+                                            {p.type === 'big' ? t('admin_preds_single_type_big') : t('admin_preds_single_type_small')}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-lg font-bold text-text-DEFAULT mb-1">{p.match}</h4>
+                                        <p className="text-sm text-text-light">{p.tip}</p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div className="bg-primary/5 rounded-md p-2">
+                                            <p className="text-[11px] uppercase text-text-light font-semibold">{t('admin_preds_staged_odds')}</p>
+                                            <p className="text-md font-bold text-accent-dark">{formatOdds(p.odds)}</p>
+                                        </div>
+                                        <div className="bg-surface-light rounded-md p-2">
+                                            <p className="text-[11px] uppercase text-text-light font-semibold">{t('predictions_card_confidence')}</p>
+                                            <p className="text-md font-bold text-text-DEFAULT">{p.confidence ? `${p.confidence}%` : '-'}</p>
+                                        </div>
+                                        <div className="bg-surface-light rounded-md p-2">
+                                            <p className="text-[11px] uppercase text-text-light font-semibold">{t('predictions_card_suggested_stake')}</p>
+                                            <p className="text-md font-bold text-secondary-dark">{p.recommendedStake ?? '1'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button onClick={() => handleOpenEditDetailsModal(p)} className="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-3 py-1 rounded">{t('action_edit_details')}</button>
+                                        <button onClick={() => handleOpenUpdateModal(p)} className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-3 py-1 rounded">{t('action_update')}</button>
+                                        <button onClick={() => handleOpenRemoveModal(p)} className="text-xs bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded">{t('action_remove')}</button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                 )}
             </div>
         </div>
     );
