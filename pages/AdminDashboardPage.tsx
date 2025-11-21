@@ -498,6 +498,18 @@ interface StagedPredictionForEdit extends Omit<Prediction, 'id' | 'odds'> {
     odds: string;
 }
 
+interface PredictionDetailForm {
+    date: string;
+    league: string;
+    match: string;
+    tip: string;
+    odds: string;
+    type: 'big' | 'small';
+    confidence: string;
+    recommendedStake: string;
+    probMax: string;
+}
+
 // Prediction Management Component
 const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refreshHistory }) => {
     const { t } = useLanguage();
@@ -526,6 +538,20 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
     const [finalScore, setFinalScore] = useState('');
     const [result, setResult] = useState<PredictionResult>(PredictionResult.PENDING);
     const [isSubmittingModal, setIsSubmittingModal] = useState(false);
+    const [isEditDetailsModalOpen, setIsEditDetailsModalOpen] = useState(false);
+    const [isSavingDetails, setIsSavingDetails] = useState(false);
+    const [detailForm, setDetailForm] = useState<PredictionDetailForm>({
+        date: '',
+        league: '',
+        match: '',
+        tip: '',
+        odds: '',
+        type: 'small',
+        confidence: '',
+        recommendedStake: '',
+        probMax: '',
+    });
+    const [detailError, setDetailError] = useState('');
 
     const [stagedCurrentPage, setStagedCurrentPage] = useState(1);
     const [tipFilter, setTipFilter] = useState('');
@@ -673,6 +699,99 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
         setFinalScore(prediction.finalScore || '');
         setResult(prediction.result === PredictionResult.PENDING ? PredictionResult.WON : prediction.result);
         setIsUpdateModalOpen(true);
+    };
+
+    const formatDateForInput = (value: string) => {
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().split('T')[0];
+        }
+        return value.split('T')[0] || value;
+    };
+
+    const handleOpenEditDetailsModal = (prediction: Prediction) => {
+        setSelectedPrediction(prediction);
+        setDetailForm({
+            date: formatDateForInput(prediction.date),
+            league: prediction.league,
+            match: prediction.match,
+            tip: prediction.tip,
+            odds: prediction.odds.toString(),
+            type: prediction.type,
+            confidence: prediction.confidence !== undefined ? prediction.confidence.toString() : '',
+            recommendedStake: prediction.recommendedStake !== undefined ? prediction.recommendedStake.toString() : '',
+            probMax: prediction.probMax !== undefined ? prediction.probMax.toString() : '',
+        });
+        setDetailError('');
+        setIsEditDetailsModalOpen(true);
+    };
+
+    const handleDetailFieldChange = (field: keyof PredictionDetailForm, value: string) => {
+        setDetailForm(prev => ({
+            ...prev,
+            [field]: field === 'type' ? (value as 'big' | 'small') : value,
+            ...(field === 'type' && value === 'small' ? { confidence: '' } : {}),
+        }));
+    };
+
+    const handleConfirmDetailsUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedPrediction) return;
+        setDetailError('');
+
+        if (!detailForm.match.trim() || !detailForm.date || !detailForm.tip.trim() || !detailForm.odds.trim()) {
+            setDetailError(t('admin_preds_single_error_fields'));
+            return;
+        }
+
+        const oddsNum = parseFloat(detailForm.odds);
+        if (isNaN(oddsNum) || oddsNum <= 0) {
+            setDetailError(t('admin_preds_single_error_odds'));
+            return;
+        }
+
+        let confidenceNum: number | undefined;
+        if (detailForm.type === 'big') {
+            confidenceNum = parseInt(detailForm.confidence, 10);
+            if (isNaN(confidenceNum) || confidenceNum < 0 || confidenceNum > 100) {
+                setDetailError(t('admin_preds_single_error_confidence'));
+                return;
+            }
+        }
+
+        let stakeNum: number | undefined;
+        if (detailForm.recommendedStake.trim()) {
+            stakeNum = parseFloat(detailForm.recommendedStake);
+            if (isNaN(stakeNum) || stakeNum <= 0) {
+                setDetailError(t('admin_preds_single_error_stake'));
+                return;
+            }
+        }
+
+        let probMaxNum: number | undefined = selectedPrediction.probMax;
+        if (detailForm.probMax.trim()) {
+            probMaxNum = parseFloat(detailForm.probMax);
+            if (isNaN(probMaxNum) || probMaxNum <= 0 || probMaxNum > 1) {
+                setDetailError(t('admin_preds_single_error_prob_max'));
+                return;
+            }
+        }
+
+        setIsSavingDetails(true);
+        await api.updatePredictionDetails(selectedPrediction.id, {
+            date: detailForm.date,
+            league: detailForm.league.trim() || 'N/A',
+            match: detailForm.match.trim(),
+            tip: detailForm.tip.trim(),
+            odds: oddsNum,
+            type: detailForm.type,
+            confidence: confidenceNum,
+            recommendedStake: stakeNum,
+            probMax: probMaxNum,
+        });
+        await fetchPendingPredictions();
+        setIsSavingDetails(false);
+        setIsEditDetailsModalOpen(false);
     };
 
     const handleOpenRemoveModal = (prediction: Prediction) => {
@@ -863,6 +982,62 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
     
     return (
         <div className="space-y-8">
+             <ActionModal isOpen={isEditDetailsModalOpen} onClose={() => setIsEditDetailsModalOpen(false)} title={t('modal_edit_prediction_title')}>
+                <form onSubmit={handleConfirmDetailsUpdate} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="editDate" className="block text-sm font-medium text-text-light">{t('admin_preds_single_date')}</label>
+                            <input id="editDate" type="date" value={detailForm.date} onChange={e => handleDetailFieldChange('date', e.target.value)} className={inputClasses} required />
+                        </div>
+                        <div>
+                            <label htmlFor="editLeague" className="block text-sm font-medium text-text-light">{t('admin_preds_single_league')}</label>
+                            <input id="editLeague" type="text" value={detailForm.league} onChange={e => handleDetailFieldChange('league', e.target.value)} className={inputClasses} />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label htmlFor="editMatch" className="block text-sm font-medium text-text-light">{t('admin_preds_single_match')}</label>
+                            <input id="editMatch" type="text" value={detailForm.match} onChange={e => handleDetailFieldChange('match', e.target.value)} className={inputClasses} required />
+                        </div>
+                        <div>
+                            <label htmlFor="editTip" className="block text-sm font-medium text-text-light">{t('admin_preds_single_tip')}</label>
+                            <input id="editTip" type="text" value={detailForm.tip} onChange={e => handleDetailFieldChange('tip', e.target.value)} className={inputClasses} required />
+                        </div>
+                        <div>
+                            <label htmlFor="editOdds" className="block text-sm font-medium text-text-light">{t('admin_preds_single_odds')}</label>
+                            <input id="editOdds" type="number" step="0.01" value={detailForm.odds} onChange={e => handleDetailFieldChange('odds', e.target.value)} className={inputClasses} required />
+                        </div>
+                        <div>
+                            <label htmlFor="editStake" className="block text-sm font-medium text-text-light">{t('admin_preds_single_stake')}</label>
+                            <input id="editStake" type="number" step="1" value={detailForm.recommendedStake} onChange={e => handleDetailFieldChange('recommendedStake', e.target.value)} className={inputClasses} placeholder={t('admin_preds_single_stake_placeholder')} />
+                        </div>
+                        <div>
+                            <label htmlFor="editType" className="block text-sm font-medium text-text-light">{t('admin_preds_single_type')}</label>
+                            <select id="editType" value={detailForm.type} onChange={e => handleDetailFieldChange('type', e.target.value)} className={inputClasses}>
+                                <option value="small">{t('admin_preds_single_type_small')}</option>
+                                <option value="big">{t('admin_preds_single_type_big')}</option>
+                            </select>
+                        </div>
+                        {detailForm.type === 'big' && (
+                            <div>
+                                <label htmlFor="editConfidence" className="block text-sm font-medium text-text-light">{t('admin_preds_single_confidence')}</label>
+                                <input id="editConfidence" type="number" min="0" max="100" value={detailForm.confidence} onChange={e => handleDetailFieldChange('confidence', e.target.value)} className={inputClasses} />
+                            </div>
+                        )}
+                        <div>
+                            <label htmlFor="editProbMax" className="block text-sm font-medium text-text-light">{t('admin_preds_staged_prob_max')}</label>
+                            <input id="editProbMax" type="number" step="0.0001" min="0" max="1" value={detailForm.probMax} onChange={e => handleDetailFieldChange('probMax', e.target.value)} className={inputClasses} />
+                        </div>
+                    </div>
+                    {detailError && <p className="text-red-500 text-sm">{detailError}</p>}
+                    <div className="mt-6 flex justify-end space-x-3">
+                        <button type="button" onClick={() => setIsEditDetailsModalOpen(false)} className="bg-surface-light text-text-light px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-200">{t('cancel')}</button>
+                        <button type="submit" disabled={isSavingDetails} className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 disabled:bg-gray-300 flex items-center">
+                            {isSavingDetails && <SpinnerIcon className="w-4 h-4 mr-2" />}
+                            {t('save_changes')}
+                        </button>
+                    </div>
+                </form>
+            </ActionModal>
+
              <ActionModal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} title={t('modal_update_result_title')}>
                 <form onSubmit={handleConfirmUpdate}>
                     <p className="text-sm text-text-light mb-4">{selectedPrediction?.match}</p>
@@ -1055,6 +1230,7 @@ const PredictionManagement: React.FC<{ refreshHistory: () => void }> = ({ refres
                                         <td className={`${commonTdClasses} font-semibold text-accent-dark`}>{isFinite(p.odds) ? p.odds.toFixed(2) : 'N/A'}</td>
                                         <td className={commonTdClasses}>
                                             <div className="flex space-x-2">
+                                                <button onClick={() => handleOpenEditDetailsModal(p)} className="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2 py-1 rounded">{t('action_edit_details')}</button>
                                                 <button onClick={() => handleOpenUpdateModal(p)} className="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2 py-1 rounded">{t('action_update')}</button>
                                                 <button onClick={() => handleOpenRemoveModal(p)} className="text-xs bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded">{t('action_remove')}</button>
                                             </div>
