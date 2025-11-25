@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/mockApi';
-import { User, Prediction, SubscriptionStatus, PredictionResult, SubscriptionPlan, League, Subscription, LandingStatHighlight, LandingCredibilityPoint, LandingTestimonial, LandingSections } from '../types';
+import { User, Prediction, SubscriptionStatus, PredictionResult, SubscriptionPlan, League, Subscription, LandingStatHighlight, LandingCredibilityPoint, LandingTestimonial, LandingSections, BankAccount, CryptoWallet, SubscriptionPrices } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import Modal from '../components/Modal';
 import { SpinnerIcon, XCircleIcon } from '../components/icons';
@@ -1664,12 +1664,29 @@ const SettingsManagement: React.FC = () => {
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
+    const [saveMessageVariant, setSaveMessageVariant] = useState<'success' | 'error' | ''>('');
 
     const [leagues, setLeagues] = useState<League[]>([]);
     const [newLeagueName, setNewLeagueName] = useState('');
     const [newLeagueLogo, setNewLeagueLogo] = useState<string | null>(null); // For base64 upload
     const [newLeagueUrl, setNewLeagueUrl] = useState(''); // For URL input
     const [logoInputMethod, setLogoInputMethod] = useState<'upload' | 'url'>('upload');
+    const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+    const [newBankAccount, setNewBankAccount] = useState<BankAccount>({
+        bankName: '',
+        accountNumber: '',
+        accountName: '',
+    });
+    const [cryptoWallets, setCryptoWallets] = useState<CryptoWallet[]>([]);
+    const [newCryptoWallet, setNewCryptoWallet] = useState<CryptoWallet>({
+        asset: '',
+        network: '',
+        address: '',
+    });
+    const [subscriptionPrices, setSubscriptionPrices] = useState<SubscriptionPrices>({ weekly: '', monthly: '' });
+    const [isSavingPayment, setIsSavingPayment] = useState(false);
+    const [paymentSaveMessage, setPaymentSaveMessage] = useState('');
+    const [paymentMessageVariant, setPaymentMessageVariant] = useState<'success' | 'error' | ''>('');
 
     const [heroTagline, setHeroTagline] = useState('');
     const [heroSubtitle, setHeroSubtitle] = useState('');
@@ -1685,6 +1702,9 @@ const SettingsManagement: React.FC = () => {
             setLogo(settings.logoUrl);
             setLogoPreview(settings.logoUrl);
             setLeagues(settings.supportedLeagues || []);
+            setBankAccounts((settings.bankAccounts || []).map(account => ({ ...account })));
+            setCryptoWallets((settings.cryptoWallets || []).map(wallet => ({ ...wallet })));
+            setSubscriptionPrices(settings.subscriptionPrices || { weekly: '', monthly: '' });
 
             const landing = settings.landingSections ?? defaultLandingSections;
             setHeroTagline(landing.heroTagline);
@@ -1740,6 +1760,61 @@ const SettingsManagement: React.FC = () => {
         setLeagues(prev => prev.filter(l => l.name !== leagueName));
     };
 
+    const handleAddBankAccount = () => {
+        const trimmed: BankAccount = {
+            bankName: newBankAccount.bankName.trim(),
+            accountNumber: newBankAccount.accountNumber.trim(),
+            accountName: newBankAccount.accountName.trim(),
+        };
+        if (!trimmed.bankName || !trimmed.accountNumber || !trimmed.accountName) return;
+        setBankAccounts(prev => [...prev, trimmed]);
+        setNewBankAccount({ bankName: '', accountNumber: '', accountName: '' });
+    };
+
+    const handleRemoveBankAccount = (index: number) => {
+        setBankAccounts(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleAddCryptoWallet = () => {
+        const trimmed: CryptoWallet = {
+            asset: newCryptoWallet.asset.trim(),
+            network: newCryptoWallet.network.trim(),
+            address: newCryptoWallet.address.trim(),
+        };
+        if (!trimmed.asset || !trimmed.network || !trimmed.address) return;
+        setCryptoWallets(prev => [...prev, trimmed]);
+        setNewCryptoWallet({ asset: '', network: '', address: '' });
+    };
+
+    const handleRemoveCryptoWallet = (index: number) => {
+        setCryptoWallets(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const sanitizeBankAccounts = () => bankAccounts
+        .map(account => ({
+            bankName: account.bankName?.trim() ?? '',
+            accountNumber: account.accountNumber?.trim() ?? '',
+            accountName: account.accountName?.trim() ?? '',
+        }))
+        .filter(account => account.bankName || account.accountNumber || account.accountName);
+
+    const sanitizeCryptoWallets = () => cryptoWallets
+        .map(wallet => ({
+            asset: wallet.asset?.trim() ?? '',
+            network: wallet.network?.trim() ?? '',
+            address: wallet.address?.trim() ?? '',
+        }))
+        .filter(wallet => wallet.asset || wallet.network || wallet.address);
+
+    const sanitizeSubscriptionPrices = () => {
+        const fallbackWeekly = settings.subscriptionPrices?.weekly ?? '$5';
+        const fallbackMonthly = settings.subscriptionPrices?.monthly ?? '$15';
+        return {
+            weekly: subscriptionPrices.weekly?.trim() || fallbackWeekly,
+            monthly: subscriptionPrices.monthly?.trim() || fallbackMonthly,
+        };
+    };
+
     const handleStatChange = (index: number, field: keyof LandingStatHighlight, value: string) => {
         setLandingStats(prev => prev.map((stat, i) => (i === index ? { ...stat, [field]: value } : stat)));
     };
@@ -1761,6 +1836,7 @@ const SettingsManagement: React.FC = () => {
     const handleSave = async () => {
         setIsSaving(true);
         setSaveMessage('');
+        setSaveMessageVariant('');
         const sanitizedStats = landingStats
             .map((stat) => ({
                 label: stat.label?.trim() ?? '',
@@ -1792,21 +1868,70 @@ const SettingsManagement: React.FC = () => {
             testimonials: sanitizedTestimonials.length ? sanitizedTestimonials : defaultLandingSections.testimonials,
         };
 
+        const sanitizedBankAccounts = sanitizeBankAccounts();
+        const sanitizedCryptoWallets = sanitizeCryptoWallets();
+        const sanitizedPrices = sanitizeSubscriptionPrices();
+
         try {
-            await api.updateSettings({ pageTitle, logoUrl: logo, supportedLeagues: leagues, landingSections: landingPayload });
+            await api.updateSettings({
+                pageTitle,
+                logoUrl: logo,
+                supportedLeagues: leagues,
+                landingSections: landingPayload,
+                bankAccounts: sanitizedBankAccounts,
+                cryptoWallets: sanitizedCryptoWallets,
+                subscriptionPrices: sanitizedPrices,
+            });
             await refreshSettings();
             setSaveMessage(t('admin_settings_save_success'));
+            setSaveMessageVariant('success');
         } catch (error) {
             console.error("Failed to save settings:", error);
-            setSaveMessage("Failed to save settings.");
+            setSaveMessage(t('admin_settings_save_error'));
+            setSaveMessageVariant('error');
         } finally {
             setIsSaving(false);
-            setTimeout(() => setSaveMessage(''), 3000);
+            setTimeout(() => {
+                setSaveMessage('');
+                setSaveMessageVariant('');
+            }, 3000);
+        }
+    };
+
+    const handleSavePayment = async () => {
+        setIsSavingPayment(true);
+        setPaymentSaveMessage('');
+        setPaymentMessageVariant('');
+        const sanitizedBankAccounts = sanitizeBankAccounts();
+        const sanitizedCryptoWallets = sanitizeCryptoWallets();
+        const sanitizedPrices = sanitizeSubscriptionPrices();
+
+        try {
+            await api.updateSettings({
+                bankAccounts: sanitizedBankAccounts,
+                cryptoWallets: sanitizedCryptoWallets,
+                subscriptionPrices: sanitizedPrices,
+            });
+            await refreshSettings();
+            setPaymentSaveMessage(t('admin_settings_save_success'));
+            setPaymentMessageVariant('success');
+        } catch (error) {
+            console.error("Failed to save payment settings:", error);
+            setPaymentSaveMessage(t('admin_settings_save_error'));
+            setPaymentMessageVariant('error');
+        } finally {
+            setIsSavingPayment(false);
+            setTimeout(() => {
+                setPaymentSaveMessage('');
+                setPaymentMessageVariant('');
+            }, 3000);
         }
     };
 
     const inputClasses = "mt-1 block w-full px-3 py-2 bg-surface-light border border-gray-300 rounded-md shadow-sm placeholder-text-dark focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const fileInputClasses = "block w-full text-sm text-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20";
+    const bankFormIncomplete = !newBankAccount.bankName.trim() || !newBankAccount.accountNumber.trim() || !newBankAccount.accountName.trim();
+    const cryptoFormIncomplete = !newCryptoWallet.asset.trim() || !newCryptoWallet.network.trim() || !newCryptoWallet.address.trim();
     
     const newLeagueLogoPreview = logoInputMethod === 'upload' ? newLeagueLogo : newLeagueUrl;
 
@@ -1902,7 +2027,203 @@ const SettingsManagement: React.FC = () => {
                     )}
                 </div>
             </div>
-            
+            <div className="bg-surface border border-gray-200 p-8 rounded-lg shadow-lg">
+                <h3 className="text-xl font-semibold">{t('admin_settings_payment_title')}</h3>
+                <p className="text-sm text-text-light mt-1 mb-6">{t('admin_settings_payment_desc')}</p>
+                <div className="mb-6 space-y-4">
+                    <h4 className="text-lg font-semibold text-text-DEFAULT">{t('admin_settings_payment_price_title')}</h4>
+                    <p className="text-sm text-text-light">{t('admin_settings_payment_price_desc')}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_price_weekly')}</label>
+                            <input
+                                type="text"
+                                value={subscriptionPrices.weekly}
+                                onChange={e => setSubscriptionPrices(prev => ({ ...prev, weekly: e.target.value }))}
+                                className={inputClasses}
+                                placeholder={t('sub_plan_weekly_price')}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_price_monthly')}</label>
+                            <input
+                                type="text"
+                                value={subscriptionPrices.monthly}
+                                onChange={e => setSubscriptionPrices(prev => ({ ...prev, monthly: e.target.value }))}
+                                className={inputClasses}
+                                placeholder={t('sub_plan_monthly_price')}
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h4 className="text-lg font-semibold text-text-DEFAULT">{t('admin_settings_payment_bank_title')}</h4>
+                        <div className="mt-3 space-y-3 p-4 border border-dashed rounded-lg bg-background">
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_bank_name')}</label>
+                                <input
+                                    type="text"
+                                    value={newBankAccount.bankName}
+                                    onChange={e => setNewBankAccount(prev => ({ ...prev, bankName: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_bank_account_number')}</label>
+                                <input
+                                    type="text"
+                                    value={newBankAccount.accountNumber}
+                                    onChange={e => setNewBankAccount(prev => ({ ...prev, accountNumber: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_bank_account_name')}</label>
+                                <input
+                                    type="text"
+                                    value={newBankAccount.accountName}
+                                    onChange={e => setNewBankAccount(prev => ({ ...prev, accountName: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleAddBankAccount}
+                                    disabled={bankFormIncomplete}
+                                    className="bg-secondary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark disabled:bg-gray-300"
+                                >
+                                    {t('admin_settings_payment_bank_add')}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                            {bankAccounts.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {bankAccounts.map((account, index) => (
+                                        <li
+                                            key={`bank-${index}`}
+                                            className="p-3 bg-surface-light border border-gray-200 rounded-md flex justify-between items-start"
+                                        >
+                                            <div className="text-sm text-text-light space-y-1">
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_name')}:</span> {account.bankName}
+                                                </p>
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_number')}:</span> {account.accountNumber}
+                                                </p>
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_name')}:</span> {account.accountName}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => handleRemoveBankAccount(index)} className="text-red-500 hover:text-red-700">
+                                                <XCircleIcon className="w-5 h-5" />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-sm text-text-light border border-dashed border-gray-300 rounded-md p-4 text-center">
+                                    {t('admin_settings_payment_bank_empty')}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div>
+                        <h4 className="text-lg font-semibold text-text-DEFAULT">{t('admin_settings_payment_crypto_title')}</h4>
+                        <div className="mt-3 space-y-3 p-4 border border-dashed rounded-lg bg-background">
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_crypto_asset')}</label>
+                                <input
+                                    type="text"
+                                    value={newCryptoWallet.asset}
+                                    onChange={e => setNewCryptoWallet(prev => ({ ...prev, asset: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_crypto_network')}</label>
+                                <input
+                                    type="text"
+                                    value={newCryptoWallet.network}
+                                    onChange={e => setNewCryptoWallet(prev => ({ ...prev, network: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-text-light">{t('admin_settings_payment_crypto_address')}</label>
+                                <input
+                                    type="text"
+                                    value={newCryptoWallet.address}
+                                    onChange={e => setNewCryptoWallet(prev => ({ ...prev, address: e.target.value }))}
+                                    className={inputClasses}
+                                />
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleAddCryptoWallet}
+                                    disabled={cryptoFormIncomplete}
+                                    className="bg-secondary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark disabled:bg-gray-300"
+                                >
+                                    {t('admin_settings_payment_crypto_add')}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mt-4 space-y-2">
+                            {cryptoWallets.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {cryptoWallets.map((wallet, index) => (
+                                        <li
+                                            key={`wallet-${index}`}
+                                            className="p-3 bg-surface-light border border-gray-200 rounded-md flex justify-between items-start"
+                                        >
+                                            <div className="text-sm text-text-light space-y-1 break-words">
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('admin_settings_payment_crypto_asset')}:</span> {wallet.asset}
+                                                </p>
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('admin_settings_payment_crypto_network')}:</span> {wallet.network}
+                                                </p>
+                                                <p>
+                                                    <span className="font-semibold text-text-DEFAULT">{t('admin_settings_payment_crypto_address')}:</span> {wallet.address}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => handleRemoveCryptoWallet(index)} className="text-red-500 hover:text-red-700">
+                                                <XCircleIcon className="w-5 h-5" />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-sm text-text-light border border-dashed border-gray-300 rounded-md p-4 text-center">
+                                    {t('admin_settings_payment_crypto_empty')}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center justify-end space-x-4 mt-6">
+                    {paymentSaveMessage && (
+                        <p className={`text-sm ${paymentMessageVariant === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+                            {paymentSaveMessage}
+                        </p>
+                    )}
+                    <button
+                        onClick={handleSavePayment}
+                        disabled={isSavingPayment}
+                        className="bg-secondary text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-secondary-dark disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        {isSavingPayment ? (
+                            <>
+                                <SpinnerIcon className="w-4 h-4 mr-2" /> {t('admin_settings_save_button_loading')}
+                            </>
+                        ) : (
+                            t('admin_settings_payment_save_button')
+                        )}
+                    </button>
+                </div>
+            </div>
+
             <div className="bg-surface border border-gray-200 p-8 rounded-lg shadow-lg">
                 <h3 className="text-xl font-semibold">{t('admin_settings_landing_title')}</h3>
                 <p className="text-sm text-text-light mt-1 mb-6">{t('admin_settings_landing_desc')}</p>
@@ -2035,7 +2356,11 @@ const SettingsManagement: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-end space-x-4 pt-4">
-                {saveMessage && <p className="text-sm text-green-600">{saveMessage}</p>}
+                {saveMessage && (
+                    <p className={`text-sm ${saveMessageVariant === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+                        {saveMessage}
+                    </p>
+                )}
                 <button
                     onClick={handleSave}
                     disabled={isSaving}

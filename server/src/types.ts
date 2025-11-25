@@ -71,11 +71,31 @@ export interface LandingSections {
   testimonials: LandingTestimonial[];
 }
 
+export interface BankAccount {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+export interface CryptoWallet {
+  asset: string;
+  network: string;
+  address: string;
+}
+
+export interface SubscriptionPrices {
+  weekly: string;
+  monthly: string;
+}
+
 export interface AppSettings {
   pageTitle: string;
   logoUrl: string | null;
   supportedLeagues: League[];
   landingSections: LandingSections;
+  bankAccounts: BankAccount[];
+  cryptoWallets: CryptoWallet[];
+  subscriptionPrices: SubscriptionPrices;
 }
 
 export interface WeeklyStat {

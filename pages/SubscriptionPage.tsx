@@ -2,29 +2,21 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { SubscriptionPlan, SubscriptionStatus } from '../types';
 import { UploadCloudIcon, CheckCircleIcon, AlertTriangleIcon, SpinnerIcon, BankIcon, CryptoIcon } from '../components/icons';
-import { useLanguage } from '../App';
+import { useLanguage, useSettings } from '../App';
 
 const SubscriptionPage: React.FC = () => {
     const { user, updateUserSubscription } = useAuth();
     const { t } = useLanguage();
+    const { settings } = useSettings();
     const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(SubscriptionPlan.NONE);
     const [paymentScreenshot, setPaymentScreenshot] = useState<string | null>(null);
     const [fileName, setFileName] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-
-    const bankAccounts = [
-        {
-            bankName: 'ProTips Global Bank',
-            accountNumber: '1234567890',
-            accountName: 'ProTips Inc.',
-        },
-        {
-            bankName: 'Premier Fiduciary',
-            accountNumber: '0987654321',
-            accountName: 'ProTips Inc.',
-        }
-    ];
+    const bankAccounts = settings?.bankAccounts || [];
+    const cryptoWallets = settings?.cryptoWallets || [];
+    const weeklyPriceLabel = settings?.subscriptionPrices?.weekly?.trim() || t('sub_plan_weekly_price');
+    const monthlyPriceLabel = settings?.subscriptionPrices?.monthly?.trim() || t('sub_plan_monthly_price');
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -107,7 +99,7 @@ const SubscriptionPage: React.FC = () => {
                 <PlanCard 
                     plan={SubscriptionPlan.WEEKLY}
                     title={t('sub_plan_weekly')}
-                    price={t('sub_plan_weekly_price')}
+                    price={weeklyPriceLabel}
                     priceDesc={t('sub_plan_weekly_priceDesc')}
                     description={t('sub_plan_weekly_desc')}
                     features={[t('sub_feature_allAccess'), t('sub_feature_7days'), t('sub_feature_billedWeekly')]}
@@ -115,7 +107,7 @@ const SubscriptionPage: React.FC = () => {
                 <PlanCard 
                     plan={SubscriptionPlan.MONTHLY}
                     title={t('sub_plan_monthly')}
-                    price={t('sub_plan_monthly_price')}
+                    price={monthlyPriceLabel}
                     priceDesc={t('sub_plan_monthly_priceDesc')}
                     description={t('sub_plan_monthly_desc')}
                     features={[t('sub_feature_allAccess'), t('sub_feature_30days'), t('sub_feature_billedMonthly')]}
@@ -134,21 +126,38 @@ const SubscriptionPage: React.FC = () => {
                             <div>
                                 <h4 className="font-bold text-md mb-3 flex items-center text-text-DEFAULT"><BankIcon className="w-5 h-5 mr-2 text-primary"/>{t('sub_paymentInfo_bank_title')}</h4>
                                 <div className="space-y-4">
-                                    {bankAccounts.map((account, index) => (
-                                        <div key={index} className="p-3 bg-background rounded-md border border-gray-200 text-sm text-text-light">
-                                            <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_name')}:</span> {account.bankName}</p>
-                                            <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_number')}:</span> {account.accountNumber}</p>
-                                            <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_name')}:</span> {account.accountName}</p>
-                                        </div>
-                                    ))}
+                                    {bankAccounts.length > 0 ? (
+                                        bankAccounts.map((account, index) => (
+                                            <div key={`bank-${index}`} className="p-3 bg-background rounded-md border border-gray-200 text-sm text-text-light">
+                                                <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_name')}:</span> {account.bankName}</p>
+                                                <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_number')}:</span> {account.accountNumber}</p>
+                                                <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_acc_name')}:</span> {account.accountName}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-text-light border border-dashed border-gray-300 rounded-md p-4 text-center">
+                                            {t('sub_paymentInfo_bank_empty')}
+                                        </p>
+                                    )}
                                     <p className="text-sm mt-2"><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_bank_reference')}:</span> {user.email}</p>
                                 </div>
                             </div>
                             <div>
                                 <h4 className="font-bold text-md mb-3 flex items-center text-text-DEFAULT"><CryptoIcon className="w-5 h-5 mr-2 text-accent"/>{t('sub_paymentInfo_crypto_title')}</h4>
                                 <div className="space-y-2 text-sm text-text-light break-all">
-                                    <p><span className="font-semibold text-text-DEFAULT">Bitcoin (BTC):</span> 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa</p>
-                                    <p><span className="font-semibold text-text-DEFAULT">Ethereum (ETH):</span> 0x3a2d61b4f4f7a8b32e8f17a9b6c8c4e0e1f2d3b4</p>
+                                    {cryptoWallets.length > 0 ? (
+                                        cryptoWallets.map((wallet, index) => (
+                                            <div key={`wallet-${index}`} className="p-3 bg-background rounded-md border border-gray-200 space-y-1">
+                                                <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_crypto_asset')}:</span> {wallet.asset}</p>
+                                                <p><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_crypto_network')}:</span> {wallet.network}</p>
+                                                <p className="break-words"><span className="font-semibold text-text-DEFAULT">{t('sub_paymentInfo_crypto_address')}:</span> {wallet.address}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-sm text-text-light border border-dashed border-gray-300 rounded-md p-4 text-center">
+                                            {t('sub_paymentInfo_crypto_empty')}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>

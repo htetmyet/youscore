@@ -1,5 +1,5 @@
 import { pool } from '../db';
-import { AppSettings, LandingSections } from '../types';
+import { AppSettings, LandingSections, BankAccount, CryptoWallet, SubscriptionPrices } from '../types';
 
 const SETTINGS_ID = 1;
 
@@ -54,6 +54,36 @@ const parseLandingSections = (raw: any): LandingSections => {
   };
 };
 
+const parseBankAccounts = (raw: any): BankAccount[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item.bankName === 'string')
+    .map((item) => ({
+      bankName: item.bankName ?? '',
+      accountNumber: item.accountNumber ?? '',
+      accountName: item.accountName ?? '',
+    }))
+    .filter((account) => account.bankName || account.accountNumber || account.accountName);
+};
+
+const parseCryptoWallets = (raw: any): CryptoWallet[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item.asset === 'string')
+    .map((item) => ({
+      asset: item.asset ?? '',
+      network: item.network ?? '',
+      address: item.address ?? '',
+    }))
+    .filter((wallet) => wallet.asset || wallet.network || wallet.address);
+};
+
+const parseSubscriptionPrices = (raw: any): SubscriptionPrices => {
+  const weekly = typeof raw?.weekly === 'string' && raw.weekly.trim() ? raw.weekly : '$5';
+  const monthly = typeof raw?.monthly === 'string' && raw.monthly.trim() ? raw.monthly : '$15';
+  return { weekly, monthly };
+};
+
 interface LeagueRow {
   name: string;
   logo_url: string | null;
@@ -74,6 +104,9 @@ export const getSettings = async (): Promise<AppSettings> => {
       logoUrl: league.logo_url ?? '',
     })),
     landingSections: parseLandingSections(row.landing_sections),
+    bankAccounts: parseBankAccounts(row.bank_accounts),
+    cryptoWallets: parseCryptoWallets(row.crypto_wallets),
+    subscriptionPrices: parseSubscriptionPrices(row.subscription_prices),
   };
 };
 
@@ -94,6 +127,18 @@ export const updateSettings = async (partial: Partial<AppSettings>) => {
     if (partial.landingSections !== undefined) {
       sets.push(`landing_sections = $${values.length + 1}::jsonb`);
       values.push(JSON.stringify(partial.landingSections));
+    }
+    if (partial.bankAccounts !== undefined) {
+      sets.push(`bank_accounts = $${values.length + 1}::jsonb`);
+      values.push(JSON.stringify(partial.bankAccounts));
+    }
+    if (partial.cryptoWallets !== undefined) {
+      sets.push(`crypto_wallets = $${values.length + 1}::jsonb`);
+      values.push(JSON.stringify(partial.cryptoWallets));
+    }
+    if (partial.subscriptionPrices !== undefined) {
+      sets.push(`subscription_prices = $${values.length + 1}::jsonb`);
+      values.push(JSON.stringify(partial.subscriptionPrices));
     }
 
     if (sets.length) {

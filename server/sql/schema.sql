@@ -44,11 +44,20 @@ CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY,
     page_title TEXT NOT NULL,
     logo_url TEXT,
-    landing_sections JSONB
+    landing_sections JSONB,
+    bank_accounts JSONB,
+    crypto_wallets JSONB,
+    subscription_prices JSONB
 );
 
 ALTER TABLE app_settings
     ADD COLUMN IF NOT EXISTS landing_sections JSONB;
+ALTER TABLE app_settings
+    ADD COLUMN IF NOT EXISTS bank_accounts JSONB;
+ALTER TABLE app_settings
+    ADD COLUMN IF NOT EXISTS crypto_wallets JSONB;
+ALTER TABLE app_settings
+    ADD COLUMN IF NOT EXISTS subscription_prices JSONB;
 
 CREATE TABLE IF NOT EXISTS supported_leagues (
     id SERIAL PRIMARY KEY,
@@ -74,5 +83,8 @@ VALUES (1, 'ProTips Football Predictor', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 UPDATE app_settings
-SET landing_sections = COALESCE(landing_sections, '{}'::jsonb)
+SET landing_sections = COALESCE(landing_sections, '{}'::jsonb),
+    bank_accounts = COALESCE(bank_accounts, '[]'::jsonb),
+    crypto_wallets = COALESCE(crypto_wallets, '[]'::jsonb),
+    subscription_prices = COALESCE(subscription_prices, '{"weekly":"$5","monthly":"$15"}'::jsonb)
 WHERE id = 1;

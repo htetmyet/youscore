@@ -35,7 +35,15 @@ const SettingsContext = createContext<{
     settings: AppSettings;
     refreshSettings: () => Promise<void>;
 }>({
-    settings: { pageTitle: 'ProTips Football Predictor', logoUrl: null, supportedLeagues: [], landingSections: defaultLandingSections },
+    settings: {
+        pageTitle: 'ProTips Football Predictor',
+        logoUrl: null,
+        supportedLeagues: [],
+        landingSections: defaultLandingSections,
+        bankAccounts: [],
+        cryptoWallets: [],
+        subscriptionPrices: { weekly: '$5', monthly: '$15' },
+    },
     refreshSettings: async () => { },
 });
 export const useSettings = () => useContext(SettingsContext);
@@ -82,7 +90,15 @@ const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children })
 
 
 const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [settings, setSettings] = useState<AppSettings>({ pageTitle: 'ProTips', logoUrl: null, supportedLeagues: [], landingSections: defaultLandingSections });
+    const [settings, setSettings] = useState<AppSettings>({
+        pageTitle: 'ProTips',
+        logoUrl: null,
+        supportedLeagues: [],
+        landingSections: defaultLandingSections,
+        bankAccounts: [],
+        cryptoWallets: [],
+        subscriptionPrices: { weekly: '$5', monthly: '$15' },
+    });
     const { t } = useLanguage();
 
     const refreshSettings = useCallback(async () => {

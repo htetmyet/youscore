@@ -315,6 +315,23 @@ router.put('/settings', asyncHandler(async (req, res) => {
     testimonials: z.array(landingTestimonialSchema),
   });
 
+  const bankAccountSchema = z.object({
+    bankName: z.string(),
+    accountNumber: z.string(),
+    accountName: z.string(),
+  });
+
+  const cryptoWalletSchema = z.object({
+    asset: z.string(),
+    network: z.string(),
+    address: z.string(),
+  });
+
+  const subscriptionPricesSchema = z.object({
+    weekly: z.string(),
+    monthly: z.string(),
+  });
+
   const schema = z.object({
     pageTitle: z.string().optional(),
     logoUrl: z.string().nullable().optional(),
@@ -323,6 +340,9 @@ router.put('/settings', asyncHandler(async (req, res) => {
       logoUrl: z.string(),
     })).optional(),
     landingSections: landingSectionsSchema.optional(),
+    bankAccounts: z.array(bankAccountSchema).optional(),
+    cryptoWallets: z.array(cryptoWalletSchema).optional(),
+    subscriptionPrices: subscriptionPricesSchema.optional(),
   });
   const payload = schema.parse(req.body);
   const settings = await updateSettings(payload);
