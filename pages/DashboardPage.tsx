@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/mockApi';
 import { WeeklyStat } from '../types';
 import { useLanguage } from '../App';
@@ -18,6 +18,7 @@ const KPICard: React.FC<{ title: string; value: string; colorClass: string; isUn
 const DashboardPage: React.FC = () => {
     const [stats, setStats] = useState<WeeklyStat[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeWeek, setActiveWeek] = useState<WeeklyStat | null>(null);
     const { t } = useLanguage();
 
     useEffect(() => {
@@ -34,6 +35,14 @@ const DashboardPage: React.FC = () => {
         };
         fetchStats();
     }, []);
+    
+    const chartWeeks = useMemo(() => stats.slice().reverse(), [stats]);
+
+    useEffect(() => {
+        if (chartWeeks.length) {
+            setActiveWeek(chartWeeks[0]);
+        }
+    }, [chartWeeks]);
 
     const allTimeStats = stats.reduce(
         (acc, week) => {
@@ -52,12 +61,18 @@ const DashboardPage: React.FC = () => {
     const totalBets = allTimeStats.winCount + allTimeStats.lossCount;
     const winRate = totalBets > 0 ? (allTimeStats.winCount / totalBets) * 100 : 0;
 
-    const maxAbsPL = Math.max(...stats.map(s => Math.abs(s.profitOrLoss)), 1);
-    const chartWeeks = stats.slice().reverse();
-    const getBarSections = (value: number) => ({
-        positive: value > 0 ? (value / maxAbsPL) * 50 : 0,
-        negative: value < 0 ? (Math.abs(value) / maxAbsPL) * 50 : 0,
-    });
+    const maxAbsPL = Math.max(...chartWeeks.map(s => Math.abs(s.profitOrLoss)), 1);
+    const maxBarHeight = 100; // Maximum height in pixels for bars
+    const getBarSections = (value: number) => {
+        if (maxAbsPL === 0) {
+            return { positive: 0, negative: 0 };
+        }
+        const relativeHeight = (Math.abs(value) / maxAbsPL) * maxBarHeight;
+        return {
+            positive: value > 0 ? relativeHeight : 0,
+            negative: value < 0 ? relativeHeight : 0,
+        };
+    };
     const aggregatePL = stats.reduce(
         (acc, week) => {
             if (week.profitOrLoss >= 0) {
@@ -89,6 +104,8 @@ const DashboardPage: React.FC = () => {
         )
     }
 
+    const highlightedWeek = activeWeek || chartWeeks[0] || null;
+
     return (
         <div className="space-y-12">
             <h1 className="text-3xl font-bold text-center text-text-DEFAULT">{t('dashboard_title')}</h1>
@@ -116,44 +133,89 @@ const DashboardPage: React.FC = () => {
             {/* Weekly P/L Chart */}
             <div className="bg-surface border border-gray-200 p-6 rounded-lg shadow-lg">
                 <h2 className="text-xl font-semibold mb-4 text-text-DEFAULT">{t('dashboard_weeklyPLChart')}</h2>
-                <div className="relative h-64">
+                {highlightedWeek && (
+                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-gray-100 bg-surface-light px-4 py-3 text-sm text-text-dark">
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-text-light">{t('dashboard_week')}</p>
+                            <p className="text-base font-semibold text-text-DEFAULT">{highlightedWeek.weekIdentifier.replace('-W', ' W')}</p>
+                            <p className="text-[11px] text-text-dark">{highlightedWeek.startDate} - {highlightedWeek.endDate}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs uppercase tracking-wide text-text-light">{t('dashboard_pl')}</p>
+                            <p className={`text-lg font-semibold ${highlightedWeek.profitOrLoss >= 0 ? 'text-primary' : 'text-red-500'}`}>
+                                {highlightedWeek.profitOrLoss.toFixed(2)} Units
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs uppercase tracking-wide text-text-light">ROI</p>
+                            <p className={`text-lg font-semibold ${highlightedWeek.roi >= 0 ? 'text-primary' : 'text-red-500'}`}>
+                                {highlightedWeek.roi.toFixed(2)}%
+                            </p>
+                            <p className="text-[11px] text-text-dark">
+                                {t('dashboard_record')}: {highlightedWeek.winCount}-{highlightedWeek.lossCount}-{highlightedWeek.returnCount}
+                            </p>
+                        </div>
+                    </div>
+                )}
+                <div className="relative mt-4 h-64">
                     <div className="absolute left-4 top-6 text-xs font-semibold text-primary">{t('dashboard_profit')}</div>
                     <div className="absolute left-4 bottom-6 text-xs font-semibold text-red-500">{t('dashboard_loss')}</div>
                     <div className="absolute left-2 right-2 top-1/2 border-t border-gray-200" aria-hidden="true" />
-                    <div className="flex items-stretch space-x-3 h-full overflow-x-auto pl-16 pr-4">
+                    <div
+                        className="flex h-full items-center justify-center gap-3 pl-16 pr-4 overflow-x-auto"
+                    >
                         {chartWeeks.map(week => {
                             const { positive, negative } = getBarSections(week.profitOrLoss);
+                            const isActive = highlightedWeek?.weekIdentifier === week.weekIdentifier;
                             return (
-                                <div key={week.weekIdentifier} className="flex-shrink-0 w-16 text-center group">
-                                    <div className="relative h-full">
-                                        {positive > 0 && (
-                                            <div className="absolute left-1/2 bottom-1/2 -translate-x-1/2 flex flex-col items-center">
-                                                <span className="mb-1 text-xs font-semibold text-text-DEFAULT opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {week.profitOrLoss.toFixed(2)}
-                                                </span>
-                                                <div
-                                                    className="w-3/4 rounded-t-md bg-primary transition-colors duration-300 group-hover:bg-primary-dark"
-                                                    style={{ height: `${positive}%` }}
-                                                />
+                                <button
+                                    key={week.weekIdentifier}
+                                    type="button"
+                                    onMouseEnter={() => setActiveWeek(week)}
+                                    onFocus={() => setActiveWeek(week)}
+                                    onClick={() => setActiveWeek(week)}
+                                    className={`group relative flex flex-col items-center py-4 px-1 min-w-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${isActive ? 'text-text-DEFAULT' : 'text-text-dark'}`}
+                                    aria-pressed={isActive}
+                                    aria-label={`${week.weekIdentifier} ${week.profitOrLoss >= 0 ? t('dashboard_profit') : t('dashboard_loss')} ${week.profitOrLoss.toFixed(2)} units`}
+                                    style={{ height: '100%' }}
+                                >
+                                    <div className="flex h-full items-center gap-1">
+                                        <div className="flex flex-col items-center h-full">
+                                            <div className="flex-1 flex items-end justify-center">
+                                                {positive > 0 && (
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span className={`text-xs font-semibold text-text-DEFAULT transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                                            {week.profitOrLoss.toFixed(2)}
+                                                        </span>
+                                                        <div
+                                                            className="w-3 rounded-t-md bg-primary transition-colors duration-300 group-hover:bg-primary-dark"
+                                                            style={{ height: `${positive}px`, minHeight: '4px' }}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        {negative > 0 && (
-                                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 flex flex-col items-center">
-                                                <div
-                                                    className="w-3/4 rounded-b-md bg-red-500 transition-colors duration-300 group-hover:bg-red-600"
-                                                    style={{ height: `${negative}%` }}
-                                                />
-                                                <span className="mt-1 text-xs font-semibold text-text-DEFAULT opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {week.profitOrLoss.toFixed(2)}
-                                                </span>
+                                            <div className="flex-1 flex items-start justify-center">
+                                                {negative > 0 && (
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <div
+                                                            className="w-3 rounded-b-md bg-red-500 transition-colors duration-300 group-hover:bg-red-600"
+                                                            style={{ height: `${negative}px`, minHeight: '4px' }}
+                                                        />
+                                                        <span className={`text-xs font-semibold text-text-DEFAULT transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                                            {week.profitOrLoss.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        {week.profitOrLoss === 0 && (
-                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-secondary-dark" />
-                                        )}
+                                            {week.profitOrLoss === 0 && (
+                                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-secondary-dark" />
+                                            )}
+                                        </div>
                                     </div>
-                                    <p className="text-xs text-text-dark mt-2 whitespace-nowrap">{week.weekIdentifier.replace('-W', ' W')}</p>
-                                </div>
+                                    <p className={`text-xs whitespace-nowrap transition-colors absolute bottom-0 ${isActive ? 'font-semibold text-text-DEFAULT' : 'text-text-dark group-hover:text-text-DEFAULT'}`}>
+                                        {week.weekIdentifier.replace('-W', ' W')}
+                                    </p>
+                                </button>
                             );
                         })}
                     </div>
