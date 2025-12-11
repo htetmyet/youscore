@@ -12,8 +12,7 @@ This contains everything you need to run your app locally.
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Run the app:
    `npm run dev`
 
 ## Backend Setup
@@ -47,7 +46,7 @@ The server automatically provisions an admin account using the credentials in `.
 Add the backend URL to your Vite env file so the API client knows where to send requests:
 
 ```
-VITE_API_BASE_URL=http://192.168.1.40:8091/api
+VITE_API_BASE_URL=http://localhost:8091/api
 GEMINI_API_KEY=...
 ```
 
@@ -61,8 +60,8 @@ Use Docker to run PostgreSQL, the API (exposed on host port 8091), and the produ
    ```bash
    docker-compose up --build
    ```
-2. The API is now reachable at http://192.168.1.40:8091/api and auto-runs database migrations plus the default admin account.
-3. The compiled frontend is served from http://192.168.1.40:8090 and talks to the API via the host port 8091. For local dev via Vite (which runs on port 5173), you can still run `npm run dev` with `VITE_API_BASE_URL=http://192.168.1.40:8091/api` (or point it to another backend if you're running it elsewhere).
+2. The API is now reachable at http://localhost:8091/api and auto-runs database migrations plus the default admin account.
+3. The compiled frontend is served from http://localhost:8090 and talks to the API via the host port 8091. For local dev via Vite (which runs on port 5173), you can still run `npm run dev` with `VITE_API_BASE_URL=http://localhost:8091/api` (or point it to another backend if you're running it elsewhere).
 
 The compose file exposes Postgres on host port 5433 (mapped to the container's 5432) and persists data in the `db_data` volume.
 
